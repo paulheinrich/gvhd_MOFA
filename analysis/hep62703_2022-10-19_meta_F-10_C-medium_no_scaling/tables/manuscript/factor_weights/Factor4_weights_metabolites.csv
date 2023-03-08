@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+taurocholic_acid,Factor4,0.436349900344926,metabolites,+,taurocholic_acid,Taurocholic acid
+ursocholic_acid,Factor4,0.412351112169573,metabolites,-,ursocholic_acid,Ursocholic acid
+7_dehydrocholic_acid,Factor4,0.359599311893878,metabolites,-,7_dehydrocholic_acid,7-Dehydrocholic acid
+propionic_acid,Factor4,0.28061225054166,metabolites,-,propionic_acid,Propionic acid
+isovaleric_acid,Factor4,0.26901153108334,metabolites,-,isovaleric_acid,Isovaleric acid
+tauroursodeoxycholic_acid,Factor4,0.266871207859115,metabolites,+,tauroursodeoxycholic_acid,Tauroursodeoxycholic acid
+valeric_acid,Factor4,0.251238403573328,metabolites,-,valeric_acid,Valeric acid
+2_methylbutyric_acid,Factor4,0.2435228723109,metabolites,-,2_methylbutyric_acid,2-Methylbutyric acid
+glycoursodeoxycholic_acid,Factor4,0.21886572405147,metabolites,+,glycoursodeoxycholic_acid,Glycoursodeoxycholic acid
+taurochenodeoxycholic_acid,Factor4,0.217319414375367,metabolites,+,taurochenodeoxycholic_acid,Taurochenodeoxycholic acid
+isobutyric_acid,Factor4,0.194252165915635,metabolites,-,isobutyric_acid,Isobutyric acid
+hexanoic_acid,Factor4,0.166089017779871,metabolites,+,hexanoic_acid,Hexanoic acid
+desaminotyrosine,Factor4,0.107187917021048,metabolites,-,desaminotyrosine,Desaminotyrosine
+glycocholic_acid,Factor4,0.0967023600811925,metabolites,+,glycocholic_acid,Glycocholic acid
+glycochenodeoxycholic_acid,Factor4,0.0782338186486367,metabolites,+,glycochenodeoxycholic_acid,Glycochenodeoxycholic acid

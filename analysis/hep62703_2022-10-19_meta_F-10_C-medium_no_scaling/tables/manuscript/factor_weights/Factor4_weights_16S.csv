@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu3,Factor4,1.97527017515566,16S,-,otu3,Bacteroides
+otu12,Factor4,1.46094879581849,16S,-,otu12,Parabacteroides
+otu23,Factor4,1.00299528906915,16S,-,otu23,UBA1819
+otu85,Factor4,0.845259368210319,16S,-,otu85,Hungatella
+otu45,Factor4,0.814963185578433,16S,-,otu45,[Clostridium] innocuum group
+otu246,Factor4,0.810143181644566,16S,+,otu246,Roseburia
+otu20_16S,Factor4,0.791899776281128,16S,-,otu20_16S,Lachnospiraceae UCG-004
+otu52,Factor4,0.746118158988274,16S,+,otu52,Veillonella
+otu170,Factor4,0.728131155599412,16S,+,otu170,Lachnospira
+otu7_16S,Factor4,0.713634768219851,16S,+,otu7_16S,Streptococcus
+otu77,Factor4,0.697328672453325,16S,+,otu77,Ruminococcus
+otu135,Factor4,0.634426563789124,16S,+,otu135,Agathobacter
+otu39,Factor4,0.634060944624096,16S,-,otu39,Odoribacter
+otu21,Factor4,0.628658091624033,16S,-,otu21,Erysipelatoclostridium
+otu252,Factor4,0.577938303795487,16S,+,otu252,[Eubacterium] eligens group

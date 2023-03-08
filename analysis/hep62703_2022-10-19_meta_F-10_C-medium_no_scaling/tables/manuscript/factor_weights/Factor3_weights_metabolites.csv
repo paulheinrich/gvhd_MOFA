@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+ursocholic_acid,Factor3,1.0412752150952,metabolites,+,ursocholic_acid,Ursocholic acid
+7_dehydrocholic_acid,Factor3,0.904957294930894,metabolites,+,7_dehydrocholic_acid,7-Dehydrocholic acid
+3_dehydrocholic_acid,Factor3,0.796595435458581,metabolites,+,3_dehydrocholic_acid,3-Dehydrocholic acid
+chenodeoxycholic_acid,Factor3,0.614550003585537,metabolites,+,chenodeoxycholic_acid,Chenodeoxycholic acid
+cholic_acid,Factor3,0.588679914418684,metabolites,+,cholic_acid,Cholic acid
+butyric_acid,Factor3,0.559024197040852,metabolites,+,butyric_acid,Butyric acid
+2_methylbutyric_acid,Factor3,0.476705715386773,metabolites,+,2_methylbutyric_acid,2-Methylbutyric acid
+isovaleric_acid,Factor3,0.439710192670341,metabolites,+,isovaleric_acid,Isovaleric acid
+desaminotyrosine,Factor3,0.428218438793881,metabolites,+,desaminotyrosine,Desaminotyrosine
+ursodeoxycholic_acid,Factor3,0.424576959434025,metabolites,+,ursodeoxycholic_acid,Ursodeoxycholic acid
+valeric_acid,Factor3,0.420812090130665,metabolites,+,valeric_acid,Valeric acid
+propionic_acid,Factor3,0.397456015815395,metabolites,+,propionic_acid,Propionic acid
+g_muricholic_acid_hyocholic_acid,Factor3,0.39234143735628,metabolites,+,g_muricholic_acid_hyocholic_acid,g-Muricholic acid hyocholic acid
+glycodeoxycholic_acid,Factor3,0.330481183352452,metabolites,-,glycodeoxycholic_acid,Glycodeoxycholic acid
+dehydrolithocholic_acid,Factor3,0.329743557813198,metabolites,+,dehydrolithocholic_acid,Dehydrolithocholic acid

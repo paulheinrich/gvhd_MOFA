@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu585,Factor4,0.0787594395122785,ITS,-,otu585,Pichia
+otu307,Factor4,0.0755750991248576,ITS,+,otu307,Kondoa
+otu891,Factor4,0.0473024684643484,ITS,+,otu891,unidentified
+otu1194,Factor4,0.0420257991346587,ITS,-,otu1194,Physisporinus
+otu1110,Factor4,0.0250313921095367,ITS,-,otu1110,Martiniozyma
+otu147,Factor4,0.0187534110407802,ITS,-,otu147,Xeromyces
+otu481,Factor4,0.0182577616444896,ITS,-,otu481,Puccinia
+otu314,Factor4,0.0161918463228726,ITS,-,otu314,Saccharomycopsis
+otu377,Factor4,0.0157922770415268,ITS,-,otu377,Rhinocladiella
+otu636,Factor4,0.0157845940690677,ITS,-,otu636,unidentified_304
+otu358,Factor4,0.0152880175278927,ITS,-,otu358,Wickerhamomyces
+otu506,Factor4,0.0144341504898384,ITS,+,otu506,Tausonia
+otu729,Factor4,0.0119068382758989,ITS,-,otu729,Rhizopus
+otu583,Factor4,0.00795963504551752,ITS,+,otu583,Itersonilia
+otu250,Factor4,0.00728663804722607,ITS,+,otu250,unidentified

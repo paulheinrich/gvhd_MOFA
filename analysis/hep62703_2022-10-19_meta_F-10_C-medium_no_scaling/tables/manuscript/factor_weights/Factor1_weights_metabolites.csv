@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+valeric_acid,Factor1,0.954449005438126,metabolites,+,valeric_acid,Valeric acid
+hexanoic_acid,Factor1,0.736338640972645,metabolites,+,hexanoic_acid,Hexanoic acid
+butyric_acid,Factor1,0.684208722088806,metabolites,+,butyric_acid,Butyric acid
+2_methylbutyric_acid,Factor1,0.656750160418326,metabolites,+,2_methylbutyric_acid,2-Methylbutyric acid
+dehydrolithocholic_acid,Factor1,0.632780281367678,metabolites,+,dehydrolithocholic_acid,Dehydrolithocholic acid
+tauroursodeoxycholic_acid,Factor1,0.604312335644485,metabolites,-,tauroursodeoxycholic_acid,Tauroursodeoxycholic acid
+isovaleric_acid,Factor1,0.566111508451284,metabolites,+,isovaleric_acid,Isovaleric acid
+indole_3_carboxyaldehyde,Factor1,0.564052128521407,metabolites,+,indole_3_carboxyaldehyde,ICA
+propionic_acid,Factor1,0.467518937130474,metabolites,+,propionic_acid,Propionic acid
+ursodeoxycholic_acid,Factor1,0.464853523674242,metabolites,-,ursodeoxycholic_acid,Ursodeoxycholic acid
+isobutyric_acid,Factor1,0.45833295667937,metabolites,+,isobutyric_acid,Isobutyric acid
+taurocholic_acid,Factor1,0.380730028104401,metabolites,-,taurocholic_acid,Taurocholic acid
+deoxycholic_acid,Factor1,0.366669828956698,metabolites,+,deoxycholic_acid,Deoxycholic acid
+glycocholic_acid,Factor1,0.361145019258874,metabolites,-,glycocholic_acid,Glycocholic acid
+glycoursodeoxycholic_acid,Factor1,0.353915531446298,metabolites,-,glycoursodeoxycholic_acid,Glycoursodeoxycholic acid

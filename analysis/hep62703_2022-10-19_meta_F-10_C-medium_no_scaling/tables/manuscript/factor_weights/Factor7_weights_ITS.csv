@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu4,Factor7,0.479021954508953,ITS,+,otu4,unidentified
+otu49,Factor7,0.478229740770637,ITS,+,otu49,unidentified
+otu26_ITS,Factor7,0.466592633264936,ITS,+,otu26_ITS,NA
+otu159,Factor7,0.404868749071017,ITS,+,otu159,unclassified_Saccharomycetaceae
+otu41,Factor7,0.37313958259937,ITS,+,otu41,Talaromyces
+otu84_ITS,Factor7,0.368631789037016,ITS,+,otu84_ITS,Penicillium
+otu5,Factor7,0.360000311767797,ITS,+,otu5,Meyerozyma
+otu2,Factor7,0.353152941686393,ITS,+,otu2,Candida
+otu13,Factor7,0.322671705833711,ITS,+,otu13,unclassified_Debaryomycetaceae
+otu10,Factor7,0.31216027033111,ITS,+,otu10,unclassified_Dipodascaceae
+otu106,Factor7,0.301638599167811,ITS,+,otu106,Aspergillus
+otu30,Factor7,0.293810433151879,ITS,+,otu30,unidentified_100
+otu7_ITS,Factor7,0.264493852914847,ITS,+,otu7_ITS,NA
+otu20_ITS,Factor7,0.251260598549855,ITS,+,otu20_ITS,Cladosporium
+otu214,Factor7,0.245347731796487,ITS,+,otu214,unclassified_Aspergillaceae

@@ -1,0 +1,295 @@
+---
+title: "MOFA Factor-Feature correlations"
+subtitle: "MOFA model which includes metabolites"
+author: "Paul Heinrich"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+# Notes
+
+Metabolite data was included in the model. No scaling of omics views to unit variance. 
+Fitting was performed with medium convergence and 10 factors. No subsets of view features were
+selected, so views have a substantial inequality in the number of features (especially
+metabolites, with only around 30 features).
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+
+library("here")
+library("ggplot2")
+library("ggpubr")
+library("rstatix")
+library("stringr")
+library("patchwork")
+library("MOFA2")
+library("knitr")
+library("dplyr")
+library("pheatmap")
+library("RColorBrewer")
+library("grid")
+library("gridExtra")
+
+here::i_am("analysis/hep62703_2022-10-19_meta_F-10_C-medium_no_scaling/reports/mofa_plots_factor_feature_corr.Rmd")
+
+source(here("functions/load_mofa_tmp_copy.R"))
+
+save_data = FALSE
+
+today <- Sys.Date()
+
+```
+
+```{r load_data, echo=FALSE, message = FALSE}
+
+analysis_path <- here("analysis/hep62703_2022-10-19_meta_F-10_C-medium_no_scaling")
+
+dir_model <- file.path(analysis_path, "data", "models")
+name_model <- "model_metabolites_medium_F10.hdf5"
+
+plot_path <- file.path(analysis_path, "img")
+table_path <- file.path(analysis_path, "tables")
+
+model <- load_mofa_tmp_copy(
+    file_directory = dir_model,
+    file_name = name_model,
+    name_tmp_folder = "p107_hp_mofa"
+)
+
+taxonomic_mapping <- list()
+mapping_views <- c("16S", "ITS")
+
+for (view in mapping_views) {
+    filename <- paste0("taxonomic_mapping_", view, ".csv")
+    taxonomic_mapping[[view]] <- read.csv(
+        here("metadata/taxonomic_classification", filename),
+        header=TRUE,
+        row.names = 1
+    )
+    mapping_vec <- taxonomic_mapping[[view]][["Genus"]]
+    names(mapping_vec) <- rownames(taxonomic_mapping[[view]])
+    taxonomic_mapping[[view]] <- mapping_vec
+}
+
+```
+
+```{r get_model_data, echo=FALSE}
+
+views <- views_names(model)
+metadata <- samples_metadata(model)
+factor_values <- get_factors(model, factors = "all")$group1
+factor_weights <- get_weights(model)
+model_input <- get_data(model)
+
+metadata[["pat_GvHD"]] <- as.factor(metadata[["pat_GvHD"]])
+metadata[["GvHD_patient"]] <- as.factor(metadata[["GvHD_patient"]])
+metadata[["pat_TRM_1yr"]] <- as.factor(metadata[["pat_TRM_1yr"]])
+
+metadata_factors <- merge(
+    x = metadata,
+    y = factor_values,
+    by.x = "sample",
+    by.y = "row.names"
+)
+
+timepoints_to_exclude <- c(
+    "allo",
+    "idx"
+)
+
+metadata_factors_subset <- metadata_factors[
+    !(metadata_factors[["pre_post_allo_SCT"]] %in% timepoints_to_exclude),
+]
+
+metadata_factors_subset[["pre_post_allo_SCT"]] <- as.factor(
+    metadata_factors_subset[["pre_post_allo_SCT"]]
+)
+
+factor_names <- colnames(metadata_factors_subset)[
+    grepl("Factor", colnames(metadata_factors_subset))
+]
+
+factors <- as.numeric(str_extract(factor_names, "[0-9]+$"))
+names(factors) <- factor_names
+
+clinical_factors <- c("GvHD_patient", "pat_TRM_1yr")
+clinical_factors_mapping <- c("GvHD", "1-year-TRM")
+names(clinical_factors_mapping) <- clinical_factors
+pre_post_values <- unique(metadata_factors_subset[["pre_post_allo_SCT"]])
+
+relevantFactors <- factors[c(1, 3, 4)]
+relevantViews <- views[c(1, 3, 4)]
+
+```
+
+# Factor-feature correlation heatmaps
+
+Correlation of factor values with top weight features.
+
+```{r factor_feature_correlations, echo=FALSE}
+
+n_weights <- 15
+top_weights <- list()
+factor_feature_corr <- list()
+factor_feature_corr_p <- list()
+
+for (factor in names(factors)) {
+    top_weights[[factor]] <- list()
+    factor_feature_corr[[factor]] <- list()
+    factor_feature_corr_p[[factor]] <- list()
+    curr_factor <- factor_values[, factor]
+    for (view in views) {
+        curr_weights <- factor_weights[[view]][, factor]
+        weight_sorting <- order(abs(curr_weights), decreasing=TRUE)
+        curr_top_weights <- curr_weights[weight_sorting][1:n_weights]
+        top_weights[[factor]][[view]] <- curr_top_weights
+
+        corr <- lapply(
+            names(curr_top_weights),
+            function(x) cor.test(
+                x = curr_factor,
+                y = model_input[[view]]$group1[x, ]
+            )
+        )
+        names(corr) <- names(curr_top_weights)
+    
+        factor_feature_corr[[factor]][[view]] <- sapply(
+            names(corr),
+            function(x) unname(corr[[x]]$estimate)
+        )
+        factor_feature_corr_p[[factor]][[view]] <- sapply(
+            names(corr),
+            function(x) unname(corr[[x]]$p.value)
+        )
+    }
+}
+
+```
+
+```{r factor_feature_heatmaps, echo=FALSE}
+
+factor_feature_heatmaps <- list()
+
+for (factor in names(factors)) {
+    factor_feature_heatmaps[[factor]] <- list()
+    for (view in views) {
+        feature_ids <- as.character(
+            names(factor_feature_corr[[factor]][[view]])
+        )
+        feature_ids <- str_remove(feature_ids, paste0("_", view, "$"))
+
+        if(view %in% names(taxonomic_mapping)) {
+            feature_names <- taxonomic_mapping[[view]][feature_ids]
+        } else {
+            feature_names <- feature_ids
+        }
+
+        mat <- matrix(factor_feature_corr[[factor]][[view]], nrow = 1)
+        colnames(mat) <- feature_names
+
+        hm <- pheatmap(
+            t(mat),
+            cluster_rows = FALSE,
+            cluster_cols = FALSE,
+            breaks=seq(-1, 1, length.out=101),
+            cellwidth = 40,
+            legend = FALSE,
+            silent = TRUE
+        )
+        factor_feature_heatmaps[[factor]][[view]] <- hm$gtable
+    }
+}
+
+print("Factor 1, pheatmap")
+
+grid.arrange(arrangeGrob(
+    grobs=factor_feature_heatmaps$Factor1[c("16S", "virome", "metabolites")], ncol=3
+))
+
+print("Factor 3, pheatmap")
+
+grid.arrange(arrangeGrob(
+    grobs=factor_feature_heatmaps$Factor3[c("16S", "virome", "metabolites")], ncol=3
+))
+
+```
+
+```{r factor_feature_heatmaps_gg, echo=FALSE}
+
+factor_feature_heatmaps_gg <- list()
+
+for (factor in names(factors)) {
+    factor_feature_heatmaps_gg[[factor]] <- list()
+    for (view in views) {
+        feature_ids <- as.character(
+            names(factor_feature_corr[[factor]][[view]])
+        )
+        feature_ids <- str_remove(feature_ids, paste0("_", view, "$"))
+
+        if(view %in% names(taxonomic_mapping)) {
+            feature_names <- taxonomic_mapping[[view]][feature_ids]
+        } else {
+            feature_names <- feature_ids
+        }
+
+        curr_data <- data.frame(
+            "view" = view,
+            "feature_id" = feature_ids,
+            "correlation" = factor_feature_corr[[factor]][[view]],
+            "feature" = feature_names
+        )
+
+        hm <- ggplot(curr_data, aes(view, feature_id, fill = correlation)) + 
+            geom_tile() +
+            scale_fill_gradient2(
+                low = "blue", mid = "white", high = "red",
+                limits = c(-1, 1)
+            ) + labs(
+                x = NULL,
+                y = NULL
+            )
+        
+        hm <- hm + scale_y_discrete(
+                breaks=hm$data[["feature_id"]],
+                labels=hm$data[["feature"]]
+        )
+
+        factor_feature_heatmaps_gg[[factor]][[view]] <- hm
+    }
+}
+
+print("Factor 1, ggplot")
+
+factor_feature_heatmaps_gg[["Factor1"]][["16S"]] +
+factor_feature_heatmaps_gg[["Factor1"]][["virome"]] +
+factor_feature_heatmaps_gg[["Factor1"]][["metabolites"]] +
+plot_layout(guides = 'collect')
+
+print("Factor 3, ggplot")
+
+factor_feature_heatmaps_gg[["Factor3"]][["16S"]] +
+factor_feature_heatmaps_gg[["Factor3"]][["virome"]] +
+factor_feature_heatmaps_gg[["Factor3"]][["metabolites"]] +
+plot_layout(guides = 'collect')
+
+```
+
+# Factor-feature scatter plots
+
+```{r factor_feature_plots, echo=FALSE}
+
+print("Factor 3, virome")
+
+plot_data_scatter(
+    model,
+    view = "virome",
+    factor = 2,
+    features = 15,
+    add_lm = TRUE
+)
+
+```
+
+```{r,eval=TRUE}
+sessionInfo()
+```
