@@ -32,6 +32,7 @@ library("pheatmap")
 library("RColorBrewer")
 library("grid")
 library("gridExtra")
+library("WriteXLS")
 
 here::i_am("analysis/hep62703_2022-10-19_meta_F-10_C-medium_no_scaling/reports/mofa_plots_manuscript.Rmd")
 
@@ -977,7 +978,7 @@ metadata_factors_no_idx_avg <- metadata_factors_no_idx %>%
 
 ```
 
-```{r save_data, echo=FALSE, eval=save_data}
+```{r save_plots, echo=FALSE, eval=save_data}
 
 # Variance explained plots
 
@@ -1225,6 +1226,299 @@ corrplot(
     tl.col = "black"
 )
 dev.off()
+
+```
+
+```{r save_plot_data, echo=FALSE, eval=save_data}
+
+## Figure 3
+
+fig3_plot_data <- list()
+
+# Factor weights
+
+fig3_factor_weight_data <- list()
+
+fig3_factor_weight_data[["weights_F1_bact"]] <- factor_weight_plots$Factor1[["16S"]]$data
+fig3_factor_weight_data[["weights_F1_vir"]] <- factor_weight_plots$Factor1[["virome"]]$data
+fig3_factor_weight_data[["weights_F1_metab"]] <- factor_weight_plots$Factor1[["metabolites"]]$data
+
+fig3_factor_weight_data[["weights_F3_bact"]] <- factor_weight_plots$Factor3[["16S"]]$data
+fig3_factor_weight_data[["weights_F3_vir"]] <- factor_weight_plots$Factor3[["virome"]]$data
+fig3_factor_weight_data[["weights_F3_metab"]] <- factor_weight_plots$Factor3[["metabolites"]]$data
+
+fig3_factor_weight_data[["weights_F1_vir"]][["feature_name"]] <- fig3_factor_weight_data[["weights_F1_vir"]][["feature"]]
+fig3_factor_weight_data[["weights_F1_metab"]][["feature_name"]] <- fig3_factor_weight_data[["weights_F1_metab"]][["feature"]]
+fig3_factor_weight_data[["weights_F3_vir"]][["feature_name"]] <- fig3_factor_weight_data[["weights_F3_vir"]][["feature"]]
+fig3_factor_weight_data[["weights_F3_metab"]][["feature_name"]] <- fig3_factor_weight_data[["weights_F3_metab"]][["feature"]]
+
+fig3_factor_weight_data <- lapply(
+    fig3_factor_weight_data,
+    function(x) {
+        x$feature_id <- NULL
+        return(x)
+    }
+)
+
+fig3_plot_data[["factor_weights"]] <- do.call(rbind, fig3_factor_weight_data)
+
+# Feature-feature scatter plots
+
+bacterial_features <- c(
+    "Ruminococcus_Gnavus_Group" = "otu54_16S",
+    "Blautia" = "otu230",
+    "Flavonifractor" = "otu32"
+)
+viral_features <- c(
+    "BAC3" = "BAC3_V__5269",
+    "VC62" = "VC_62_0"
+)
+metabolite_features <- c(
+    "butyric_acid" = "butyric_acid",
+    "isovaleric_acid" = "isovaleric_acid"
+)
+
+fig3_scatter_data <- list()
+
+for (feat in names(bacterial_features)) {
+    fig3_scatter_data[[feat]] <- model_input[["16S"]]$group1[bacterial_features[feat], ]
+}
+for (feat in names(viral_features)) {
+    fig3_scatter_data[[feat]] <- model_input[["virome"]]$group1[viral_features[feat], ]
+}
+for (feat in names(metabolite_features)) {
+    fig3_scatter_data[[feat]] <- model_input[["metabolites"]]$group1[metabolite_features[feat], ]
+}
+fig3_scatter_data <- data.frame(fig3_scatter_data)
+fig3_scatter_data[["sample"]] <- rownames(fig3_scatter_data)
+fig3_scatter_data <- relocate(fig3_scatter_data, sample)
+
+fig3_scatter_data_NA_bact_vir <- apply(
+    is.na(fig3_scatter_data[, c(names(bacterial_features), names(viral_features))]), 1,
+    function(x) sum(x) != 0
+)
+fig3_scatter_data <- fig3_scatter_data[!fig3_scatter_data_NA_bact_vir, ]
+
+fig3_plot_data[["feature_feature_scatter"]] <- fig3_scatter_data
+
+WriteXLS(
+    fig3_plot_data,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "fig3_plot_data.xlsx"
+    ),
+    row.names = FALSE
+)
+
+## Figure 4
+
+# Factor-factor scatter averaged: factor metadata avg script
+
+## Figure 6
+
+# Factor-metadata boxplots ATB: factor metadata avg script
+
+## Supp Figure 4
+
+# Variance explained plots
+
+supp_fig4_plot_data <- list()
+
+plt_var_expl_data <- plt_var_expl$data
+plt_var_expl_data$group <- NULL
+
+supp_fig4_plot_data[["var_explained"]] <- plt_var_expl_data
+
+plt_var_expl_abs_data <- plt_var_expl_abs$data
+plt_var_expl_abs_data$group <- NULL
+
+supp_fig4_plot_data[["var_explained_total"]] <- plt_var_expl_abs_data
+
+# Factor weights fungome and factor 4
+
+supp_fig4_factor_weight_data <- list()
+
+supp_fig4_factor_weight_data[["weights_F4_bact"]] <- factor_weight_plots$Factor4[["16S"]]$data
+supp_fig4_factor_weight_data[["weights_F4_vir"]] <- factor_weight_plots$Factor4[["virome"]]$data
+supp_fig4_factor_weight_data[["weights_F4_metab"]] <- factor_weight_plots$Factor4[["metabolites"]]$data
+
+supp_fig4_factor_weight_data[["weights_F4_vir"]][["feature_name"]] <- supp_fig4_factor_weight_data[["weights_F4_vir"]][["feature"]]
+supp_fig4_factor_weight_data[["weights_F4_metab"]][["feature_name"]] <- supp_fig4_factor_weight_data[["weights_F4_metab"]][["feature"]]
+
+supp_fig4_factor_weight_data[["weights_F1_fung"]] <- factor_weight_plots$Factor1[["ITS"]]$data
+supp_fig4_factor_weight_data[["weights_F3_fung"]] <- factor_weight_plots$Factor3[["ITS"]]$data
+
+supp_fig4_factor_weight_data <- lapply(
+    supp_fig4_factor_weight_data,
+    function(x) {
+        x$feature_id <- NULL
+        return(x)
+    }
+)
+
+supp_fig4_plot_data[["factor_weights"]] <- do.call(rbind, supp_fig4_factor_weight_data)
+
+# Factor metabolite corr
+
+supp_fig4_plot_data[["factor_metab_corr"]] <- as.data.frame(
+    cbind(factor_metabolite_corr$Panel_1, factor_metabolite_corr$Panel_2)
+)
+supp_fig4_plot_data[["factor_metab_corr"]][["Factor"]] <- rownames(
+    supp_fig4_plot_data[["factor_metab_corr"]]
+)
+rownames(supp_fig4_plot_data[["factor_metab_corr"]]) <- NULL
+supp_fig4_plot_data[["factor_metab_corr"]] <- relocate(
+    supp_fig4_plot_data[["factor_metab_corr"]],
+    Factor
+)
+
+# Factor-timepoint boxplots (with statistics)
+
+supp_fig4_plot_data[["factor_timepoint_data"]] <- metadata_factors_no_idx[
+    , c("sample", "pat_Project_ID", "amp_Timepoint", names(relevantFactors))
+]
+
+supp_fig4_plot_data[["factor_timepoint_p_vals"]] <- as.data.frame(
+    cbind(factor_timepoint_p_vals, factor_timepoint_p_vals_adj)
+)
+supp_fig4_plot_data[["factor_timepoint_p_vals"]][["comparison"]] <- rownames(supp_fig4_plot_data[["factor_timepoint_p_vals"]])
+rownames(supp_fig4_plot_data[["factor_timepoint_p_vals"]]) <- NULL
+supp_fig4_plot_data[["factor_timepoint_p_vals"]] <- relocate(
+    supp_fig4_plot_data[["factor_timepoint_p_vals"]],
+    comparison
+)
+
+WriteXLS(
+    supp_fig4_plot_data,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "supp_fig4_plot_data.xlsx"
+    ),
+    row.names = FALSE
+)
+
+## Supp Figure 5
+
+# Feature-feature correlation heatmaps
+
+supp_fig5_plot_data <- list()
+
+factor_name_mapping <- c(
+    "Factor1" = "F1",
+    "Factor3" = "F3",
+    "Factor4" = "F4"
+)
+comb_name_mapping <- c(
+    "16S_virome" = "16S_vir",
+    "16S_metabolites" = "16S_metab",
+    "virome_metabolites" = "vir_metab"
+)
+
+for (factor in names(feature_feature_corr)) {
+    for (comb in names(feature_feature_corr[[factor]])) {
+        name_base <- paste0(factor_name_mapping[factor], "_", comb_name_mapping[comb])
+        name_corr <- paste0("corr_", name_base)
+        name_p <- paste0("p_", name_base)
+        name_p_adj <- paste0("p_adj_", name_base)
+
+        supp_fig5_plot_data[[name_corr]] <- as.data.frame(feature_feature_corr[[factor]][[comb]])
+        supp_fig5_plot_data[[name_p]] <- as.data.frame(feature_feature_corr_p[[factor]][[comb]])
+        supp_fig5_plot_data[[name_p_adj]] <- as.data.frame(feature_feature_corr_p_adj[[factor]][[comb]])
+    }
+}
+
+WriteXLS(
+    supp_fig5_plot_data,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "supp_fig5_plot_data.xlsx"
+    ),
+    row.names = TRUE
+)
+
+## Supp Figure 8
+
+supp_fig8_plot_data <- list()
+
+# Feature-feature scatter
+
+bacterial_features_supp_fig8 <- c(
+    "Ruminococcus_Gnavus_Group" = "otu54_16S",
+    "Blautia" = "otu230",
+    "Flavonifractor" = "otu32",
+    "Bacteroides" = "otu3",
+    "Parabacteroides" = "otu12",
+    "Lachnoclostridium" = "otu26_16S"
+)
+viral_features_supp_fig8 <- c(
+    "BAC3" = "BAC3_V__5269",
+    "VC62" = "VC_62_0",
+    "VC191" = "VC_191_0",
+    "VC612" = "VC_612_0",
+    "VC27" = "VC_27_1"
+)
+metabolite_features_supp_fig8 <- c(
+    "propionic_acid" = "propionic_acid",
+    "DAT" = "desaminotyrosine",
+    "ICA" = "indole_3_carboxyaldehyde",
+    "dehydro_LCA" = "dehydrolithocholic_acid"
+)
+
+supp_fig8_scatter_data <- list()
+
+for (feat in names(bacterial_features_supp_fig8)) {
+    supp_fig8_scatter_data[[feat]] <- model_input[["16S"]]$group1[bacterial_features_supp_fig8[feat], ]
+}
+for (feat in names(viral_features_supp_fig8)) {
+    supp_fig8_scatter_data[[feat]] <- model_input[["virome"]]$group1[viral_features_supp_fig8[feat], ]
+}
+for (feat in names(metabolite_features_supp_fig8)) {
+    supp_fig8_scatter_data[[feat]] <- model_input[["metabolites"]]$group1[metabolite_features_supp_fig8[feat], ]
+}
+supp_fig8_scatter_data <- data.frame(supp_fig8_scatter_data)
+supp_fig8_scatter_data[["sample"]] <- rownames(supp_fig8_scatter_data)
+supp_fig8_scatter_data <- relocate(supp_fig8_scatter_data, sample)
+
+supp_fig8_scatter_data_NA_bact_vir <- apply(
+    is.na(supp_fig8_scatter_data[, c(names(bacterial_features_supp_fig8), names(viral_features_supp_fig8))]), 1,
+    function(x) sum(x) != 0
+)
+supp_fig8_scatter_data <- supp_fig8_scatter_data[!supp_fig8_scatter_data_NA_bact_vir, ]
+
+supp_fig8_plot_data[["feature_feature_scatter"]] <- supp_fig8_scatter_data
+
+WriteXLS(
+    supp_fig8_plot_data,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "supp_fig8_plot_data.xlsx"
+    ),
+    row.names = FALSE
+)
+
+## Supp Figure 10
+
+# Factor-metadata boxplots survival: factor metadata avg script
+
+## Supp Figure 11
+
+# Factor-metadata boxplots IMM-RI: factor metadata avg script
+
+## Supp Figure 12
+
+# Factor-metadata boxplots BCoAT: factor metadata avg script
+
+## Supp Figure 13
+
+# Factor-metadata boxplots BCoAT contigs: factor metadata avg script
 
 ```
 

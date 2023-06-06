@@ -31,6 +31,7 @@ library("RColorBrewer")
 library("grid")
 library("gridExtra")
 library("readxl")
+library("WriteXLS")
 
 here::i_am("analysis/hep62703_2022-10-19_meta_F-10_C-medium_no_scaling/reports/factor_metadata_plots.Rmd")
 
@@ -533,7 +534,7 @@ for (comb in names(factor_factor_scatter)) {
 
 ```
 
-```{r save_data, echo=FALSE, eval=save_data}
+```{r save_plots, echo=FALSE, eval=save_data}
 
 # Factor boxplots with fdr-controlled statistics
 
@@ -592,6 +593,115 @@ write.csv(
         "factor_values_post-avg.csv"
     ),
     row.names = FALSE
+)
+
+```
+
+```{r save_plot_data, echo=FALSE, eval=save_data}
+
+## Figure 4
+
+# Factor-factor scatter averaged TRM
+
+## Figure 6
+
+# Factor-metadata boxplots ATB
+
+## Supp Figure 10
+
+# Factor-metadata boxplots survival
+
+## Supp Figure 11
+
+# Factor-metadata boxplots IMM-RI
+
+## Supp Figure 12
+
+# Factor-metadata boxplots BCoAT
+
+fig_clin_mapping <- c(
+    "fig4" = "pat_TRM_2yr",
+    "fig6" = "atb_Antibiotic_therapy",
+    "supp_fig10" = "pat_survival_overall_2yr",
+    "supp_fig11" = "Index5binary",
+    "supp_fig12" = "has_BCoAT_expression"
+)
+
+select_cols_base <- c(
+    "pat_Project_ID",
+    names(relevantFactors)
+)
+
+plot_data_clin <- list()
+
+for (clin in fig_clin_mapping) {
+    plot_data_clin[[clin]] <- metadata_factors_tp_avg %>%
+        select(all_of(c(select_cols_base, clin))) %>%
+        filter(!is.na(.data[[clin]]))
+}
+
+for (fig in names(fig_clin_mapping)) {
+    clin <- fig_clin_mapping[fig]
+
+    WriteXLS(
+        plot_data_clin[[clin]],
+        file.path(
+            plot_path,
+            "manuscript",
+            "plot_data",
+            paste0(fig, "_plot_data.xlsx")
+        ),
+        SheetNames = clin,
+        row.names = FALSE
+    )
+}
+
+## Supp Figure 13
+
+# Factor-metadata boxplots BCoAT contigs
+
+plot_data_clin[["has_BCoAT_VC"]] <- metadata_factors_tp_avg %>%
+        select(all_of(c(select_cols_base, "has_BCoAT_VC_1", "has_BCoAT_VC_2"))) %>%
+        filter(!is.na(has_BCoAT_VC_1) | !is.na(has_BCoAT_VC_2))
+
+WriteXLS(
+    plot_data_clin[["has_BCoAT_VC"]],
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "supp_fig13_plot_data.xlsx"
+    ),
+    SheetNames = "has_BCoAT_VC",
+    row.names = FALSE
+)
+
+# Table with p values
+
+p_val_table <- as.data.frame(cbind(p_vals, p_vals_adjusted))
+
+write.csv(
+    p_val_table,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "factor_metadata_p_vals.csv"
+    ),
+    row.names = TRUE
+)
+
+# Table with all factor values
+
+write.csv(
+    factor_values,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "factor_values.csv"
+    ),
+    row.names = TRUE
 )
 
 ```

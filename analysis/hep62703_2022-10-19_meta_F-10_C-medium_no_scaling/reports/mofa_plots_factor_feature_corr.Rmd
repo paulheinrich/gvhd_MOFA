@@ -29,6 +29,7 @@ library("pheatmap")
 library("RColorBrewer")
 library("grid")
 library("gridExtra")
+library("WriteXLS")
 
 here::i_am("analysis/hep62703_2022-10-19_meta_F-10_C-medium_no_scaling/reports/mofa_plots_factor_feature_corr.Rmd")
 
@@ -122,36 +123,29 @@ relevantViews <- views[c(1, 3, 4)]
 
 ```
 
-# Factor-feature correlation heatmaps
-
-Correlation of factor values with top weight features.
-
 ```{r factor_feature_correlations, echo=FALSE}
 
-n_weights <- 15
-top_weights <- list()
 factor_feature_corr <- list()
 factor_feature_corr_p <- list()
+p_vals <- c()
+corr_coefs <- c()
 
-for (factor in names(factors)) {
-    top_weights[[factor]] <- list()
+for (factor in names(relevantFactors)) {
     factor_feature_corr[[factor]] <- list()
     factor_feature_corr_p[[factor]] <- list()
     curr_factor <- factor_values[, factor]
     for (view in views) {
         curr_weights <- factor_weights[[view]][, factor]
-        weight_sorting <- order(abs(curr_weights), decreasing=TRUE)
-        curr_top_weights <- curr_weights[weight_sorting][1:n_weights]
-        top_weights[[factor]][[view]] <- curr_top_weights
+        curr_weights <- curr_weights[order(abs(curr_weights), decreasing=TRUE)]
 
         corr <- lapply(
-            names(curr_top_weights),
+            names(curr_weights),
             function(x) cor.test(
                 x = curr_factor,
                 y = model_input[[view]]$group1[x, ]
             )
         )
-        names(corr) <- names(curr_top_weights)
+        names(corr) <- names(curr_weights)
     
         factor_feature_corr[[factor]][[view]] <- sapply(
             names(corr),
@@ -161,20 +155,37 @@ for (factor in names(factors)) {
             names(corr),
             function(x) unname(corr[[x]]$p.value)
         )
+
+        curr_p_vals <- factor_feature_corr_p[[factor]][[view]]
+        names(curr_p_vals) <- paste0(factor, "_", view, "_", names(curr_p_vals))
+
+        p_vals <- c(p_vals, curr_p_vals)
+
+        curr_corr_coefs <- factor_feature_corr[[factor]][[view]]
+        names(curr_corr_coefs) <- paste0(factor, "_", view, "_", names(curr_corr_coefs))
+
+        corr_coefs <- c(corr_coefs, curr_corr_coefs)
     }
 }
 
+p_vals_adjusted <- p.adjust(p_vals, method = "BH")
+
 ```
+
+# Factor-feature correlation heatmaps
+
+Correlation of factor values with top weight features.
 
 ```{r factor_feature_heatmaps, echo=FALSE}
 
+n_weights <- 15
 factor_feature_heatmaps <- list()
 
-for (factor in names(factors)) {
+for (factor in names(relevantFactors)) {
     factor_feature_heatmaps[[factor]] <- list()
     for (view in views) {
         feature_ids <- as.character(
-            names(factor_feature_corr[[factor]][[view]])
+            names(factor_feature_corr[[factor]][[view]])[1:n_weights]
         )
         feature_ids <- str_remove(feature_ids, paste0("_", view, "$"))
 
@@ -184,7 +195,7 @@ for (factor in names(factors)) {
             feature_names <- feature_ids
         }
 
-        mat <- matrix(factor_feature_corr[[factor]][[view]], nrow = 1)
+        mat <- matrix(factor_feature_corr[[factor]][[view]][1:n_weights], nrow = 1)
         colnames(mat) <- feature_names
 
         hm <- pheatmap(
@@ -218,11 +229,11 @@ grid.arrange(arrangeGrob(
 
 factor_feature_heatmaps_gg <- list()
 
-for (factor in names(factors)) {
+for (factor in names(relevantFactors)) {
     factor_feature_heatmaps_gg[[factor]] <- list()
     for (view in views) {
         feature_ids <- as.character(
-            names(factor_feature_corr[[factor]][[view]])
+            names(factor_feature_corr[[factor]][[view]])[1:n_weights]
         )
         feature_ids <- str_remove(feature_ids, paste0("_", view, "$"))
 
@@ -235,7 +246,7 @@ for (factor in names(factors)) {
         curr_data <- data.frame(
             "view" = view,
             "feature_id" = feature_ids,
-            "correlation" = factor_feature_corr[[factor]][[view]],
+            "correlation" = factor_feature_corr[[factor]][[view]][1:n_weights],
             "feature" = feature_names
         )
 
@@ -274,6 +285,70 @@ plot_layout(guides = 'collect')
 
 ```
 
+# Fraction of significant factor-feature associations
+
+```{r fraction_sig_associations, echo=FALSE}
+
+sig_threshold <- 0.05
+
+total_num_fractions <- length(relevantFactors)*length(views)
+sig_assoc <- c()
+factor_id <- c()
+view_id <- c()
+
+for (factor in names(relevantFactors)) {
+    for (view in views) {
+        factor_id <- c(factor_id, factor)
+        view_id <- c(view_id, view)
+
+        curr_subset <- p_vals_adjusted[
+            grep(paste0("^", factor, "_", view), names(p_vals_adjusted))
+        ]
+        curr_frac <- sum(curr_subset <= sig_threshold)/length(curr_subset)
+
+        sig_assoc <- c(sig_assoc, curr_frac)
+    }
+}
+
+frac_sig_associations <- data.frame(
+    "factor" = factor_id,
+    "view" = factor(view_id, levels = rev(views)),
+    "fraction_sig" = sig_assoc
+)
+
+```
+
+```{r fraction_sig_associations_plots, echo=FALSE}
+
+fraction_sig_assoc_plot <- ggbarplot(
+    data = frac_sig_associations,
+    x = "factor",
+    y = "fraction_sig",
+    fill = "view",
+    xlab = FALSE,
+    ylab = "Fraction of significant associations"
+) + geom_text(
+    aes(label = round(fraction_sig, 2)),
+    position = position_stack(vjust = 0.5),
+    size = 4
+) + scale_fill_manual(
+    values = rev(c("#F9F2ED", "#3AB0FF", "#FFB562", "#F87474")),
+    name = NULL,
+    breaks = c("16S", "ITS", "virome", "metabolites"),
+    labels = c("Bacteriome", "Fungome", "Virome", "Metabolites"),
+) + scale_x_discrete(
+    breaks = c("Factor1", "Factor3", "Factor4"),
+    labels = c("Factor 1", "Factor 3", "Factor 4")
+) + theme(
+    legend.text = element_text(size = 15),
+    axis.text = element_text(size = 15),
+    axis.title = element_text(size = 15)
+)
+
+fraction_sig_assoc_plot
+
+```
+
 # Factor-feature scatter plots
 
 ```{r factor_feature_plots, echo=FALSE}
@@ -286,6 +361,61 @@ plot_data_scatter(
     factor = 2,
     features = 15,
     add_lm = TRUE
+)
+
+```
+
+```{r save_plots, echo=FALSE, eval=save_data}
+
+# Fraction of significant associations
+
+ggsave(
+    filename = file.path(
+        plot_path,
+        "manuscript",
+        "factor_feature_corr",
+        "fraction_sig_associations.png"
+    ),
+    plot = fraction_sig_assoc_plot,
+    width = 10,
+    height = 10,
+    dpi = 300
+)
+
+```
+
+```{r save_plot_data, echo=FALSE, eval=save_data}
+
+# Fraction of significant associations
+
+write.csv(
+    frac_sig_associations,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "fraction_sig_associations.csv"
+    ),
+    row.names = FALSE
+)
+
+# Factor-feature correlations
+
+factor_feature_corr_table <- data.frame(
+    corr_coefs,
+    p_vals,
+    p_vals_adjusted
+)
+
+write.csv(
+    factor_feature_corr_table,
+    file.path(
+        plot_path,
+        "manuscript",
+        "plot_data",
+        "factor_feature_corr.csv"
+    ),
+    row.names = TRUE
 )
 
 ```
