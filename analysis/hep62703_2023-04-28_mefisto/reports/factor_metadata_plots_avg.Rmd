@@ -1,0 +1,602 @@
+---
+title: "Factor metadata boxplots"
+subtitle: "MEFISTO model which includes metabolites"
+author: "Paul Heinrich"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+# Notes
+
+Metabolite data was included in the model. No scaling of omics views to unit variance. 
+Fitting was performed with medium convergence and 10 factors. No subsets of view features were
+selected, so views have a substantial inequality in the number of features (especially
+metabolites, with only around 30 features). Time was used as a covariate for the MEFISTO model,
+all POST time points were set to 35 days in the model.
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+
+library("here")
+library("ggplot2")
+library("ggpubr")
+library("ggrepel")
+library("rstatix")
+library("stringr")
+library("patchwork")
+library("MOFA2")
+library("knitr")
+library("dplyr")
+library("pheatmap")
+library("RColorBrewer")
+library("grid")
+library("gridExtra")
+library("readxl")
+
+here::i_am("analysis/hep62703_2023-04-28_mefisto/reports/factor_metadata_plots_avg.Rmd")
+
+source(here("functions/load_mofa_tmp_copy.R"))
+
+save_data = FALSE
+
+today <- Sys.Date()
+
+set.seed(42)
+
+```
+
+```{r load_data, echo=FALSE, message = FALSE}
+
+analysis_path <- here("analysis/hep62703_2023-04-28_mefisto")
+
+dir_model <- file.path(analysis_path, "data", "models")
+name_model <- "model_metabolites_mefisto.hdf5"
+
+plot_path <- file.path(analysis_path, "img")
+table_path <- file.path(analysis_path, "tables")
+
+model <- load_mofa_tmp_copy(
+    file_directory = dir_model,
+    file_name = name_model,
+    name_tmp_folder = "p107_hp_mofa"
+)
+
+os_trm_relapse_updated <- read.csv(
+    here("metadata/OS_TRM_Relapse_2022-11-15.csv")
+)
+colnames(os_trm_relapse_updated) <- c(
+    "Project_ID",
+    "pat_survival_overall_2yr",
+    "pat_TRM_2yr",
+    "pat_relapse_2yr"
+)
+
+metabolite_index <- read_excel(here("metadata/metabolite_index_5.xlsx"))
+contig_table <- read_excel(here("metadata/BCOAT-1.xlsx"))
+bcoat_expression_table <- read_excel(here("metadata/BCOAT_qPCR.xlsx"))
+
+taxonomic_mapping <- list()
+mapping_views <- c("16S", "ITS")
+
+for (view in mapping_views) {
+    filename <- paste0("taxonomic_mapping_", view, ".csv")
+    taxonomic_mapping[[view]] <- read.csv(
+        here("metadata/taxonomic_classification", filename),
+        header=TRUE,
+        row.names = 1
+    )
+    mapping_vec <- taxonomic_mapping[[view]][["Genus"]]
+    names(mapping_vec) <- rownames(taxonomic_mapping[[view]])
+    taxonomic_mapping[[view]] <- mapping_vec
+}
+
+```
+
+```{r get_model_data, echo=FALSE}
+
+views <- views_names(model)
+metadata <- samples_metadata(model)
+factor_values <- get_factors(model, factors = "all")$group1
+factor_weights <- get_weights(model)
+model_input <- get_data(model)
+
+# Remove outlier samples (time points too long after allo-SCT)
+
+outlier_samples <- c("R-AS-8", "R-AN-7")
+metadata <- metadata[!(metadata[["sample"]] %in% outlier_samples), ]
+
+# Remove double d14 sample of M-AG
+
+metadata <- metadata[!(metadata[["sample"]] %in% "M-AG-3"), ]
+
+outlier_samples <- c("R-AS-8", "R-AN-7")
+metadata <- metadata[!(metadata[["sample"]] %in% outlier_samples), ]
+
+# Fix wrong GvHD entry
+
+metadata[metadata[["sample"]] == "M-AV-1", "pat_GvHD"] <- 2
+
+# Add updated overall survival
+
+metadata <- merge(
+    x = metadata,
+    y = os_trm_relapse_updated,
+    by.x = "pat_Project_ID",
+    by.y = "Project_ID",
+    all.x = TRUE
+)
+
+# Add metabolite index
+
+metadata <- merge(
+    x = metadata,
+    y = metabolite_index,
+    by.x = "pat_Project_ID",
+    by.y = "ID",
+    all.x = TRUE
+)
+
+# Add contig table
+
+# Check difference/overlap of samples between metadata and contig table
+
+print("Samples unique to contig table")
+setdiff(contig_table[["Project ID"]], metadata[["Project_ID"]])
+print("Samples unique to metadata")
+setdiff(metadata[["Project_ID"]], contig_table[["Project ID"]])
+print("Intersect")
+intersect(metadata[["Project_ID"]], contig_table[["Project ID"]])
+
+# Sample R-BB-2 occurs twice in contig table with different vir seq ids. Presumably, the occurence of R-BB-2 at d -7
+# (BAX1_V) is actually R-BB-1
+
+kable(metadata[
+    metadata[["pat_Project_ID"]] == "R-BB",
+    c("sample", "amp_Timepoint", "vir_Sample_ID", "vir_seq_sample_id")
+])
+
+contig_table[
+    contig_table[["contig_id_vs2"]] == "BAX1_V",
+    "Project ID"
+] <- "R-BB-1"
+
+# Join contig table
+
+contig_table_reduced <- contig_table[, c("Project ID", "VC-1", "VC-2")]
+colnames(contig_table_reduced) <- c("Project_ID", "BCoAT_VC_1", "BCoAT_VC_2")
+
+metadata <- merge(
+    x = metadata,
+    y = contig_table_reduced,
+    by.x = "sample",
+    by.y = "Project_ID",
+    all.x = TRUE
+)
+
+# Add BCoAT qPCR data
+
+metadata$sample[!(metadata$sample %in% bcoat_expression_table$ProjectID)]
+bcoat_expression_table$ProjectID[!(bcoat_expression_table$ProjectID %in% metadata$sample)]
+
+bcoat_expression_table_reduced <- bcoat_expression_table %>% select(ProjectID, `copiesBCoAT per gram dry feces`)
+colnames(bcoat_expression_table_reduced) <- c("Project_ID", "copies_BCoAT_per_g_dry_feces")
+
+metadata <- merge(
+    x = metadata,
+    y = bcoat_expression_table_reduced,
+    by.x = "sample",
+    by.y = "Project_ID",
+    all.x = TRUE
+)
+
+# Create custom column for metadata analysis
+
+metadata[["pat_GvHD_binary"]] <- as.numeric(metadata[["pat_GvHD"]] > 0)
+metadata[["GvHD_sample_binary"]] <- as.numeric(metadata[["GvHD_sample"]] > 0)
+metadata[["has_BCoAT_VC_1"]] <- as.numeric(metadata[["BCoAT_VC_1"]] > 0)
+metadata[["has_BCoAT_VC_2"]] <- as.numeric(metadata[["BCoAT_VC_2"]] > 0)
+metadata[["has_BCoAT_expression"]] <- as.numeric(metadata[["copies_BCoAT_per_g_dry_feces"]] > 0)
+
+metadata_factors <- merge(
+    x = metadata,
+    y = factor_values,
+    by.x = "sample",
+    by.y = "row.names"
+)
+
+timepoints_to_exclude <- c(
+    "allo",
+    "idx"
+)
+
+metadata_factors_subset <- metadata_factors[
+    !(metadata_factors[["pre_post_allo_SCT"]] %in% timepoints_to_exclude),
+]
+
+metadata_factors_subset[["pre_post_allo_SCT"]] <- as.factor(
+    metadata_factors_subset[["pre_post_allo_SCT"]]
+)
+
+factor_names <- colnames(metadata_factors_subset)[
+    grepl("Factor", colnames(metadata_factors_subset))
+]
+
+factors <- as.numeric(str_extract(factor_names, "[0-9]+$"))
+names(factors) <- factor_names
+
+clinical_factors <- c(
+    "pat_GvHD_binary", "pat_TRM_2yr", "pat_survival_overall_2yr", "atb_Antibiotic_therapy", "Index5binary",
+    "has_BCoAT_VC_1", "has_BCoAT_VC_2", "has_BCoAT_expression"
+)
+clinical_factors_mapping <- c(
+    "GvHD", "2-year-TRM", "2-year-Survival", "ABX", "Metabolite index",
+    "BCoAT VC-1", "BCoAT VC-2", "BCoAT expression"
+)
+names(clinical_factors_mapping) <- clinical_factors
+clinical_factors_labels <- list(
+    c("No GI-GvHD", "GI-GvHD"),
+    c("No 2-yr-TRM", "2-yr-TRM"),
+    c("2-yr Survival", "No 2-yr survival"),
+    c("No ABX", "ABX"),
+    c("low", "high"),
+    c("no", "yes"),
+    c("no", "yes"),
+    c("no", "yes")
+)
+names(clinical_factors_labels) <- clinical_factors
+clinical_metadata_colors <- c("#0F7FFE", "#FB0106")
+
+pre_post_values <- unique(metadata_factors_subset[["pre_post_allo_SCT"]])
+
+relevantFactors <- factors[c(1, 3, 4)]
+relevantViews <- views[c(1, 3, 4)]
+
+```
+
+```{r factor_plot_function, echo=FALSE}
+
+boxplot_custom <- function(
+    df, x, y, color = NULL,
+    title = NULL,
+    alpha = 1
+) {
+    colorParam <- color
+    if(is.null(color)) {
+        color <- x
+    }
+
+    plt <- ggplot(
+        df,
+        mapping = aes_string(
+            x = x, y = y
+        )
+    ) + ggtitle(title) +
+    geom_boxplot(
+        aes_string(color = color),
+        outlier.shape = NA,
+        alpha = alpha
+    ) +
+    theme(
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")
+    )
+
+    if(!is.null(colorParam)) {
+        plt <- plt + geom_point(
+            aes_string(color = color),
+            #size = 0.5,
+            position = position_jitterdodge()
+        )
+    } else {
+        plt <- plt + geom_point(
+            #size = 0.5,
+            position = position_jitter()
+        )
+    }
+
+    return(plt)
+}
+
+```
+
+```{r factor_metadata_statistics, echo=FALSE, results="asis"}
+
+timepoints <- c("7", "14", "21")
+
+metadata_factors_tp <- metadata_factors_subset[
+    metadata_factors_subset$amp_Timepoint %in% timepoints,
+]
+metadata_factors_tp[["amp_Timepoint"]] <- factor(
+    metadata_factors_tp[["amp_Timepoint"]], levels = timepoints
+)
+factors_tp_avg <- metadata_factors_tp %>%
+    group_by(pat_Project_ID) %>%
+    summarise(across(starts_with("Factor"), mean))
+
+metadata_clin_by_pat <- metadata_factors_tp %>% group_by(pat_Project_ID) %>% summarize(
+    across(clinical_factors, function(x) ifelse(!all(is.na(x)), as.numeric(sum(x, na.rm = TRUE) > 0), NA))
+)
+
+clinical_factors_standard <- c("pat_GvHD_binary", "pat_TRM_2yr", "pat_survival_overall_2yr", "atb_Antibiotic_therapy", "Index5binary")
+clinical_factors_bcoat <- c("has_BCoAT_VC_1", "has_BCoAT_VC_2", "has_BCoAT_expression")
+
+metadata_clin_by_pat <- metadata_clin_by_pat %>% mutate(
+    across(clinical_factors_standard, function(x) factor(x, levels = c(0, 1)))
+)
+metadata_clin_by_pat <- metadata_clin_by_pat %>% mutate(
+    across(clinical_factors_bcoat, function(x) factor(x, levels = c(1, 0)))
+)
+
+metadata_factors_tp_avg <- merge(
+    x = factors_tp_avg,
+    y = metadata_clin_by_pat,
+    by.x = "pat_Project_ID",
+    by.y = "pat_Project_ID"
+)
+
+stats_metadata_tp <- list()
+p_vals <- c()
+
+# Statistical tests
+
+for (factor in names(relevantFactors)) {
+    stats_metadata_tp[[factor]] <- list()
+
+    for (clin in clinical_factors) {
+        formula_clin <- formula(paste(factor, "~", clin))
+
+        stats_clin <- metadata_factors_tp_avg %>%
+        filter(!is.na(.data[[clin]])) %>%
+        rstatix::wilcox_test(formula_clin) %>%
+        add_significance("p") %>% add_xy_position(x = clin, dodge = 0.8)
+
+        stats_clin[["y.position"]] <- stats_clin[["y.position"]] + 0.2
+        stats_metadata_tp[[factor]][[clin]] <- stats_clin
+
+        p_vals_curr <- stats_clin[["p"]]
+        names(p_vals_curr) <- paste(factor, clin, sep = "_")
+        p_vals <- c(p_vals, p_vals_curr)
+    }
+}
+
+# Adjust p values
+
+p_vals_adjusted <- p.adjust(p_vals, method = "BH")
+
+for (factor in names(relevantFactors)) {
+    for (clin in clinical_factors) {
+        curr_name <- paste(factor, clin, sep = "_")
+        stats_metadata_tp[[factor]][[clin]][["p.adj"]] <- signif(p_vals_adjusted[curr_name], 4)
+        stats_metadata_tp[[factor]][[clin]] <- stats_metadata_tp[[factor]][[clin]] %>% add_significance("p.adj")
+    }
+}
+
+```
+
+# Factor box plots with statistical tests, FDR corrected
+
+## Clinical metadata
+
+```{r factor_metadata_plots, echo=FALSE, results="asis"}
+
+factor_metadata_plots_tp <- list()
+
+for (factor in names(relevantFactors)) {
+    cat(paste0("### ", factor))
+    cat("\n\n")
+    factor_metadata_plots_tp[[factor]] <- list()
+
+    for (clin in clinical_factors_standard) {
+        cat(paste0("#### Clinical variable: ", clinical_factors_mapping[clin]))
+        cat("\n\n")
+
+        stats_clin <- stats_metadata_tp[[factor]][[clin]]
+        metadata_factors_tp_avg_subset <- metadata_factors_tp_avg %>% filter(!is.na(.data[[clin]]))
+
+        plt <- boxplot_custom(
+            df = metadata_factors_tp_avg_subset[, c(factor, clin)],
+            x = clin,
+            y = factor,
+            color = clin
+        ) + labs(
+            x = clinical_factors_mapping[clin],
+            color = clinical_factors_mapping[clin]
+        ) + scale_x_discrete(
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]]
+        ) + scale_color_manual(
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = clinical_metadata_colors
+        ) +
+        #stat_pvalue_manual(stats_clin, label = "p = {p} ({p.signif})", tip.length = 0.02)
+        stat_pvalue_manual(stats_clin, label = "p = {p.adj} ({p.adj.signif})", tip.length = 0.02)
+
+        factor_metadata_plots_tp[[factor]][[clin]] <- plt
+        print(plt)
+        cat("\n\n")
+    }
+}
+
+```
+
+## BCoAT data
+
+```{r factor_metadata_plots_bcoat, echo=FALSE, results="asis"}
+
+for (factor in names(relevantFactors)) {
+    cat(paste0("### ", factor))
+    cat("\n\n")
+    for (clin in clinical_factors_bcoat) {
+        cat(paste0("#### Clinical variable: ", clinical_factors_mapping[clin]))
+        cat("\n\n")
+
+        stats_clin <- stats_metadata_tp[[factor]][[clin]]
+        metadata_factors_tp_avg_subset <- metadata_factors_tp_avg %>% filter(!is.na(.data[[clin]]))
+
+        plt <- boxplot_custom(
+            df = metadata_factors_tp_avg_subset[, c(factor, clin)],
+            x = clin,
+            y = factor,
+            color = clin
+        ) + labs(
+            x = clinical_factors_mapping[clin],
+            color = clinical_factors_mapping[clin]
+        ) + scale_x_discrete(
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]]
+        ) + scale_color_manual(
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = rev(clinical_metadata_colors)
+        ) +
+        #stat_pvalue_manual(stats_clin, label = "p = {p} ({p.signif})", tip.length = 0.02)
+        stat_pvalue_manual(stats_clin, label = "p = {p.adj} ({p.adj.signif})", tip.length = 0.02)
+
+        factor_metadata_plots_tp[[factor]][[clin]] <- plt
+        print(plt)
+        cat("\n\n")
+    }
+}
+
+```
+
+# Factor-factor scatter plots
+
+```{r factor_factor_scatter, echo=FALSE, results="asis", fig.dim = c(10, 10)}
+
+factor_factor_scatter <- list()
+
+factor_combs <- list(
+    "Factor1_Factor3" = c("Factor1", "Factor3"),
+    "Factor1_Factor4" = c("Factor1", "Factor4"),
+    "Factor4_Factor3" = c("Factor4", "Factor3")
+)
+
+for (comb in names(factor_combs)) {
+    factor_factor_scatter[[comb]] <- list()
+    factor_a <- factor_combs[[comb]][1]
+    factor_b <- factor_combs[[comb]][2]
+
+    for (clin in clinical_factors_standard) {
+        metadata_factors_tp_avg_no_na <- metadata_factors_tp_avg[
+            !is.na(metadata_factors_tp_avg[[clin]]),
+        ]
+
+        factor_factor_scatter[[comb]][[clin]] <- ggscatter(
+            metadata_factors_tp_avg_no_na %>% arrange(.data[[clin]]),
+            x = factor_a,
+            y = factor_b,
+            color = clin,
+            fill = clin,
+            shape = clin,
+            stroke = clin,
+            size = 4
+        ) + scale_shape_manual(
+            name = NULL,
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = c(21, 4)
+        ) + scale_color_manual(
+            name = NULL,
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = clinical_metadata_colors
+        ) + scale_fill_manual(
+            name = NULL,
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = alpha(clinical_metadata_colors, 0.2)
+        ) + scale_discrete_manual(
+            aesthetics = "stroke",
+            name = NULL,
+            breaks = c(0, 1),
+            labels = clinical_factors_labels[[clin]],
+            values = c(1, 2)
+        )
+    }
+}
+
+# Print plots
+
+for (comb in names(factor_factor_scatter)) {
+    cat(paste0("## ", comb))
+    cat("\n\n")
+    for (plt_id in names(factor_factor_scatter[[comb]])) {
+        cat(paste0("### ", plt_id))
+        cat("\n\n")
+        print(factor_factor_scatter[[comb]][[plt_id]])
+        cat("\n\n")
+    }
+}
+
+```
+
+```{r save_data, echo=FALSE, eval=save_data}
+
+# Factor boxplots with fdr-controlled statistics
+
+for (factor in names(relevantFactors)) {
+    for (clin in clinical_factors) {
+        plot_name <- paste0(
+            factor, "_metadata_boxplot_post-avg_", clin, "_stats_fdr.png"
+        )
+        plt <- factor_metadata_plots_tp[[factor]][[clin]] + labs(x = NULL, color = NULL)
+
+        ggsave(
+            filename = file.path(
+                plot_path,
+                "manuscript",
+                "factor_metadata_boxplots",
+                plot_name
+            ),
+            plot = plt,
+            width = 8,
+            height = 8,
+            dpi = 300
+        )
+    }
+}
+
+# Factor-factor metadata scatter
+
+for (comb in names(factor_factor_scatter)) {
+    for (plt_id in names(factor_factor_scatter[[comb]])) {
+        plot_name <- paste0(comb, "_", plt_id, "_post-avg.png")
+        plt <- factor_factor_scatter[[comb]][[plt_id]]
+
+        ggsave(
+            filename = file.path(
+                plot_path,
+                "manuscript",
+                "factor_factor_scatter",
+                plot_name
+            ),
+            plot = plt,
+            width = 8,
+            height = 8,
+            dpi = 300
+        )
+    }
+}
+
+# Save averaged factor values to csv
+
+write.csv(
+    factors_tp_avg,
+    file.path(
+        table_path,
+        "manuscript",
+        "factor_metadata_analysis",
+        "factor_values_post-avg.csv"
+    ),
+    row.names = FALSE
+)
+
+```
+
+```{r,eval=TRUE}
+sessionInfo()
+```

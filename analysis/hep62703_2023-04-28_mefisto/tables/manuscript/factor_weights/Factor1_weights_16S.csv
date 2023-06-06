@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu54_16S,Factor1,1.72560678441222,16S,+,otu54_16S,unclassified_Lachnospiraceae
+otu48,Factor1,1.61993631581819,16S,+,otu48,unidentified
+otu77,Factor1,1.56108355836137,16S,+,otu77,Ruminococcus
+otu15,Factor1,1.52829092980882,16S,+,otu15,Subdoligranulum
+otu46_16S,Factor1,1.48875972082349,16S,+,otu46_16S,Alistipes
+otu3,Factor1,1.44842981105647,16S,+,otu3,Bacteroides
+otu199,Factor1,1.42690862448091,16S,+,otu199,Faecalibacterium
+otu352,Factor1,1.42612059985911,16S,+,otu352,Lachnospiraceae NC2004 group
+otu259,Factor1,1.41570484504287,16S,+,otu259,Lachnospiraceae UCG-008
+otu6,Factor1,1.39187611407246,16S,-,otu6,Enterococcus
+otu84_16S,Factor1,1.31942445395396,16S,+,otu84_16S,Oscillibacter
+otu230,Factor1,1.26462766992226,16S,+,otu230,Blautia
+otu351,Factor1,1.24396414329084,16S,+,otu351,[Ruminococcus] torques group
+otu492_16S,Factor1,1.17474278799634,16S,+,otu492_16S,unclassified_Oscillospiraceae
+otu274,Factor1,1.15881424841677,16S,+,otu274,Coprococcus

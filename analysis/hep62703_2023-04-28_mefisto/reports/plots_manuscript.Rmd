@@ -1,0 +1,1266 @@
+---
+title: "MEFISTO on longitudinal allo-SCT microbiome data"
+subtitle: "MEFISTO model which includes metabolites, plots for manuscript"
+author: "Paul Heinrich"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+# Notes
+
+Metabolite data was included in the model. No scaling of omics views to unit variance. 
+Fitting was performed with medium convergence and 10 factors. No subsets of view features were
+selected, so views have a substantial inequality in the number of features (especially
+metabolites, with only around 30 features). Time was used as a covariate for the MEFISTO model,
+all POST time points were set to 35 days in the model.
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+
+library("here")
+library("ggplot2")
+library("ggpubr")
+library("ggrepel")
+library("corrplot")
+library("rstatix")
+library("stringr")
+library("patchwork")
+library("MOFA2")
+library("knitr")
+library("tidyr")
+library("dplyr")
+library("pheatmap")
+library("RColorBrewer")
+library("grid")
+library("gridExtra")
+
+here::i_am("analysis/hep62703_2023-04-28_mefisto/reports/plots_manuscript.Rmd")
+
+source(here("functions/load_mofa_tmp_copy.R"))
+
+save_data = FALSE
+
+today <- Sys.Date()
+
+set.seed(42)
+
+```
+
+```{r load_data, echo=FALSE, message = FALSE}
+
+analysis_path <- here("analysis/hep62703_2023-04-28_mefisto")
+
+dir_model <- file.path(analysis_path, "data", "models")
+name_model <- "model_metabolites_mefisto.hdf5"
+
+plot_path <- file.path(analysis_path, "img")
+table_path <- file.path(analysis_path, "tables")
+
+model <- load_mofa_tmp_copy(
+    file_directory = dir_model,
+    file_name = name_model,
+    name_tmp_folder = "p107_hp_mofa"
+)
+
+overall_survival_updated <- read.csv(
+    here("metadata/overall_survival_2022-11-15.csv")
+)
+colnames(overall_survival_updated) <- c("Project_ID", "pat_survival_overall")
+
+name_mapping <- list()
+mapping_views <- c("16S", "ITS")
+
+metabolite_name_mapper <- function(metabolite_ids) {
+    metabolite_names <- sapply(
+        metabolite_ids,
+        function(x) paste0(
+            toupper(substr(x, 1, 1)),
+            substr(x, 2, nchar(x))
+        )
+    )
+    metabolite_names[
+        metabolite_names == "Indole_3_carboxyaldehyde"
+    ] <- "ICA"
+    metabolite_names[
+        metabolite_names == "2_methylbutyric_acid"
+    ] <- "2-Methylbutyric acid"
+    metabolite_names[
+        metabolite_names == "3_dehydrocholic_acid"
+    ] <- "3-Dehydrocholic acid"
+    metabolite_names[
+        metabolite_names == "7_dehydrocholic_acid"
+    ] <- "7-Dehydrocholic acid"
+    metabolite_names[
+        metabolite_names == "7_ketolithocholic_acid"
+    ] <- "7-Ketolithocholic acid"
+    metabolite_names[
+        metabolite_names == "G_muricholic_acid_hyocholic_acid"
+    ] <- "g-Muricholic acid hyocholic acid"
+
+    metabolite_names <- stringr::str_replace_all(
+        metabolite_names, "_", replacement = " "
+    )
+    names(metabolite_names) <- metabolite_ids
+
+    return(metabolite_names)
+}
+
+for (view in mapping_views) {
+    filename <- paste0("taxonomic_mapping_", view, ".csv")
+    name_mapping[[view]] <- read.csv(
+        here("metadata/taxonomic_classification", filename),
+        header=TRUE,
+        row.names = 1
+    )
+    mapping_vec <- name_mapping[[view]][["Genus"]]
+    names(mapping_vec) <- rownames(name_mapping[[view]])
+    name_mapping[[view]] <- mapping_vec
+}
+name_mapping[["metabolites"]] <- metabolite_name_mapper(
+    rownames(get_weights(model)[["metabolites"]])
+)
+
+```
+
+```{r get_model_data, echo=FALSE}
+
+views <- views_names(model)
+metadata <- samples_metadata(model)
+factor_values <- get_factors(model, factors = "all")$group1
+factor_weights <- get_weights(model)
+model_input <- get_data(model)
+
+# Remove outlier samples (time points too long after allo-SCT)
+
+outlier_samples <- c("R-AS-8", "R-AN-7")
+metadata <- metadata[!(metadata[["sample"]] %in% outlier_samples), ]
+
+# Fix wrong GvHD entry
+
+metadata[metadata[["sample"]] == "M-AV-1", "pat_GvHD"] <- 2
+
+# Add updated overall survival
+
+metadata <- merge(
+    x = metadata,
+    y = overall_survival_updated,
+    by.x = "pat_Project_ID",
+    by.y = "Project_ID"
+)
+
+# Create binary GvHD column from patient characteristics data
+
+metadata[["pat_GvHD_binary"]] <- ifelse(metadata[["pat_GvHD"]] > 0, 1, 0)
+metadata[["pat_survival_1yr_overall_binary"]] <- ifelse(metadata[["pat_survival_1yr_overall"]] > 0, 1, 0)
+
+metadata[["pat_GvHD_binary"]] <- as.factor(metadata[["pat_GvHD_binary"]])
+metadata[["GvHD_patient"]] <- as.factor(metadata[["GvHD_patient"]])
+metadata[["pat_TRM_1yr"]] <- as.factor(metadata[["pat_TRM_1yr"]])
+metadata[["pat_survival_overall"]] <- as.factor(metadata[["pat_survival_overall"]])
+metadata[["pat_survival_1yr_overall_binary"]] <- as.factor(metadata[["pat_survival_1yr_overall_binary"]])
+
+metadata_factors <- merge(
+    x = metadata,
+    y = factor_values,
+    by.x = "sample",
+    by.y = "row.names"
+)
+
+timepoints_to_exclude <- c(
+    "allo",
+    "idx"
+)
+
+metadata_factors_subset <- metadata_factors[
+    !(metadata_factors[["pre_post_allo_SCT"]] %in% timepoints_to_exclude),
+]
+
+metadata_factors_subset[["pre_post_allo_SCT"]] <- as.factor(
+    metadata_factors_subset[["pre_post_allo_SCT"]]
+)
+
+factor_names <- colnames(metadata_factors_subset)[
+    grepl("Factor", colnames(metadata_factors_subset))
+]
+
+factors <- as.numeric(str_extract(factor_names, "[0-9]+$"))
+names(factors) <- factor_names
+
+clinical_factors <- c("pat_GvHD_binary", "pat_TRM_1yr", "pat_survival_overall")
+clinical_factors_mapping <- c("GvHD", "1-year-TRM", "Survival")
+names(clinical_factors_mapping) <- clinical_factors
+clinical_factors_labels <- list(
+    c("No GI-GvHD", "GI-GvHD"),
+    c("No 1-yr-TRM", "1-yr-TRM"),
+    c("Survival", "No survival")
+)
+names(clinical_factors_labels) <- clinical_factors
+clinical_metadata_colors <- c("#0F7FFE", "#FB0106")
+
+relevantFactors <- factors[c(1, 3, 4)]
+relevantViews <- views[c(1, 3, 4)]
+
+```
+
+# Variance analysis
+
+```{r variance_analysis, echo=FALSE}
+
+plt_var_expl <- plot_variance_explained(model, x = "view", y = "factor")
+plt_var_expl_abs <- plot_variance_explained(
+    model,
+    x ="view",
+    y = "factor",
+    plot_total = TRUE
+)[[2]]
+
+plt_var_expl
+plt_var_expl_abs
+
+```
+
+# Time-covariation analysis
+
+```{r time_covariation_analysis, echo=FALSE}
+
+plot_factors_vs_cov(model, color_by = "time")
+
+plot_factors_vs_cov(model, factors = 1, color_by = "time")
+plot_factors_vs_cov(model, factors = 3, color_by = "time")
+plot_factors_vs_cov(model, factors = 4, color_by = "time")
+
+print("Scale values representing the time-dependency of a given factor")
+
+covariate_scales <- get_scales(model)
+covariate_scales_table <- data.frame(
+    "Factor" = names(covariate_scales),
+    "Scale_param" = covariate_scales,
+    row.names = NULL
+)
+
+kable(covariate_scales_table)
+
+```
+
+# Factor weight plots
+
+```{r factor_weight_plots, echo=FALSE, results="asis"}
+
+factor_weight_plots <- list()
+
+for (factor in names(factors)) {
+    factor_weight_plots[[factor]] <- list()
+    for (view in views) {
+        plt <- plot_top_weights(model,
+            view = view,
+            factor = factors[factor],
+            nfeatures = 15,
+            scale = FALSE
+        )
+
+        if(view %in% names(name_mapping)) {
+            feature_ids <- as.character(plt$data[["feature_id"]])
+            feature_ids <- str_remove(feature_ids, paste0("_", view, "$"))
+            plt$data[["feature_name"]] <- name_mapping[[view]][feature_ids]
+
+            plt <- plt + scale_x_discrete(
+                breaks=plt$data[["feature_id"]],
+                labels=plt$data[["feature_name"]]
+            )
+        }
+
+        factor_weight_plots[[factor]][[view]] <- plt
+    }
+}
+
+for (factor in names(relevantFactors)) {
+    cat(paste0("## ", factor))
+    cat("\n\n")
+    for (view in relevantViews) {
+        cat(paste0("### View: ", view))
+        cat("\n\n")
+        plot(factor_weight_plots[[factor]][[view]])
+        cat("\n\n")
+    }
+}
+
+```
+
+# Feature-feature correlation heatmaps
+
+```{r factor_feature_correlations, echo=FALSE}
+
+n_weights <- 15
+top_weights <- list()
+
+for (factor in names(factors)) {
+    top_weights[[factor]] <- list()
+    for (view in views) {
+        curr_weights <- factor_weights[[view]][, factor]
+        weight_sorting <- order(abs(curr_weights), decreasing=TRUE)
+        curr_top_weights <- curr_weights[weight_sorting][1:n_weights]
+        top_weights[[factor]][[view]] <- curr_top_weights
+    }
+}
+
+```
+
+```{r feature_feature_correlations, echo=FALSE}
+
+viewCombs <- combn(relevantViews, 2)
+colnames(viewCombs) <- apply(
+    viewCombs, 2,
+    function(x) paste0(x[1], "_", x[2])
+)
+viewCombs[, "virome_metabolites"] <- rev(viewCombs[, "virome_metabolites"])
+
+feature_feature_corr <- list()
+feature_feature_corr_p <- list()
+feature_feature_corr_p_adj <- list()
+
+for (factor in names(relevantFactors)) {
+    feature_feature_corr[[factor]] <- list()
+    feature_feature_corr_p[[factor]] <- list()
+    feature_feature_corr_p_adj[[factor]] <- list()
+    for (comb in colnames(viewCombs)) {
+        curr_view_a <- viewCombs[1, comb]
+        curr_view_b <- viewCombs[2, comb]
+        curr_top_weights_a <- names(top_weights[[factor]][[curr_view_a]])
+        curr_top_weights_b <- names(top_weights[[factor]][[curr_view_b]])
+        
+        corr_mat <- matrix(0, nrow = n_weights, ncol = n_weights)
+        rownames(corr_mat) <- curr_top_weights_a
+        colnames(corr_mat) <- curr_top_weights_b
+        corr_p_val_mat <- corr_mat
+
+        for (feature_a in rownames(corr_mat)) {
+            for (feature_b in colnames(corr_mat)) {
+                corr <- cor.test(
+                    x = model_input[[curr_view_a]]$group1[feature_a, ],
+                    y = model_input[[curr_view_b]]$group1[feature_b, ],
+                    method = "pearson"
+                )
+                corr_mat[feature_a, feature_b] <- corr$estimate
+                corr_p_val_mat[feature_a, feature_b] <- corr$p.value
+            }
+        }
+
+        corr_p_val_df <- as.data.frame(corr_p_val_mat)
+        corr_p_val_df[["view_a"]] <- rownames(corr_p_val_df)
+        corr_p_val_long <- pivot_longer(
+            corr_p_val_df,
+            cols = 1:15,
+            names_to = "view_b",
+            values_to = "p"
+        )
+        corr_p_val_long[["p_adj"]] <- p.adjust(
+            corr_p_val_long[["p"]], method = "BH"
+        )
+        corr_p_val_adj_df <- as.data.frame(pivot_wider(
+            corr_p_val_long,
+            id_cols = "view_a",
+            names_from = "view_b",
+            values_from = "p_adj"
+        ))
+        rownames(corr_p_val_adj_df) <- corr_p_val_adj_df[["view_a"]]
+        corr_p_val_adj_df <- corr_p_val_adj_df[, colnames(corr_p_val_adj_df) != "view_a"]
+        corr_p_val_adj_mat <- as.matrix(corr_p_val_adj_df)
+
+        feature_feature_corr[[factor]][[comb]] <- corr_mat
+        feature_feature_corr_p[[factor]][[comb]] <- corr_p_val_mat
+        feature_feature_corr_p_adj[[factor]][[comb]] <- corr_p_val_adj_mat
+    }
+}
+
+```
+
+```{r feature_feature_heatmaps, echo=FALSE, results="asis", fig.dim = c(10, 10)}
+
+feature_feature_heatmaps <- list()
+feature_feature_heatmap_matrices <- list()
+
+for (factor in names(feature_feature_corr)) {
+    cat(paste0("## ", factor))
+    cat("\n\n")
+    feature_feature_heatmaps[[factor]] <- list()
+    feature_feature_heatmap_matrices[[factor]] <- list()
+    for (comb in colnames(viewCombs)) {
+        cat(paste0("### Views: ", comb))
+        cat("\n\n")
+        feature_ids <- list()
+        feature_names <- list()
+        for (view in viewCombs[, comb]) {
+            feature_ids[[view]] <- as.character(
+                names(top_weights[[factor]][[view]])
+            )
+            feature_ids[[view]] <- str_remove(
+                feature_ids[[view]], paste0("_", view, "$")
+            )
+
+            if(view %in% names(name_mapping)) {
+                feature_names[[view]] <- name_mapping[[view]][feature_ids[[view]]]
+            } else {
+                feature_names[[view]] <- feature_ids[[view]]
+            }
+        }
+
+        mat <- feature_feature_corr[[factor]][[comb]]
+        rownames(mat) <- feature_names[[1]]
+        colnames(mat) <- feature_names[[2]]
+
+        hm <- pheatmap(
+            mat,
+            cluster_rows = FALSE,
+            cluster_cols = FALSE,
+            breaks=seq(-1, 1, length.out=101),
+            silent = TRUE
+        )
+        feature_feature_heatmaps[[factor]][[comb]] <- hm$gtable
+        feature_feature_heatmap_matrices[[factor]][[comb]] <- mat
+
+        corrplot(
+            mat,
+            col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+            tl.col = "black"
+        )
+        cat("\n\n")
+    }
+}
+
+# for (factor in names(feature_feature_corr)) {
+#     cat(paste0("## ", factor))
+#     cat("\n\n")
+#     for (comb in colnames(viewCombs)) {
+#         cat(paste0("### Views: ", comb))
+#         cat("\n\n")
+#         plot(feature_feature_heatmaps[[factor]][[comb]])
+#         cat("\n\n")
+#     }
+# }
+
+```
+
+# Factor-metabolite correlation
+
+```{r factor_metabolite_corr, echo=FALSE, message = FALSE}
+
+metabolites_all <- c(
+    'acetic_acid',
+    'butyric_acid',
+    'chenodeoxycholic_acid',
+    'cholic_acid',
+    'dehydrolithocholic_acid',
+    'deoxycholic_acid',
+    'desaminotyrosine',
+    'glycochenodeoxycholic_acid',
+    'glycocholic_acid',
+    'glycodeoxycholic_acid',
+    'glycoursodeoxycholic_acid',
+    'hexanoic_acid',
+    'indole_3_carboxyaldehyde',
+    'isobutyric_acid',
+    'isovaleric_acid',
+    'lactic_acid',
+    'propionic_acid',
+    'taurochenodeoxycholic_acid',
+    'taurocholic_acid',
+    'tauroursodeoxycholic_acid',
+    'ursocholic_acid',
+    'ursodeoxycholic_acid',
+    'valeric_acid',
+    '2_methylbutyric_acid',
+    '3_dehydrocholic_acid',
+    '7_dehydrocholic_acid',
+    '7_ketolithocholic_acid',
+    'g_muricholic_acid_hyocholic_acid'
+)
+
+metabolite_panels <- list()
+
+metabolite_panels[["Panel_1"]] <- c(
+    'acetic_acid',
+    'propionic_acid',
+    'isobutyric_acid',
+    'butyric_acid',
+    '2_methylbutyric_acid',
+    'isovaleric_acid',
+    'valeric_acid',
+    'hexanoic_acid',
+    'lactic_acid',
+    'indole_3_carboxyaldehyde',
+    'desaminotyrosine'
+)
+
+metabolite_panels[["Panel_2"]] <- c(
+    'chenodeoxycholic_acid',
+    'cholic_acid',
+    'dehydrolithocholic_acid',
+    'deoxycholic_acid',
+    'glycochenodeoxycholic_acid',
+    'glycocholic_acid',
+    'glycodeoxycholic_acid',
+    'glycoursodeoxycholic_acid',
+    'taurochenodeoxycholic_acid',
+    'taurocholic_acid',
+    'tauroursodeoxycholic_acid',
+    'ursocholic_acid',
+    'ursodeoxycholic_acid',
+    '3_dehydrocholic_acid',
+    '7_dehydrocholic_acid',
+    '7_ketolithocholic_acid',
+    'g_muricholic_acid_hyocholic_acid'
+)
+
+factor_metabolite_corr <- list()
+factor_metabolite_corr_p <- list()
+factor_metabolite_heatmap_matrices <- list()
+
+for (panel in names(metabolite_panels)) {
+    curr_metabolites <- metabolite_panels[[panel]]
+    corr_mat <- matrix(
+        0, nrow = length(factors), ncol = length(curr_metabolites)
+    )
+    rownames(corr_mat) <- names(factors)
+    colnames(corr_mat) <- curr_metabolites
+    corr_p_val_mat <- corr_mat
+
+    for (factor in names(factors)) {
+        for (metabolite in curr_metabolites) {
+            corr <- cor.test(
+                x = factor_values[, factor],
+                y = model_input[["metabolites"]]$group1[metabolite, ]
+            )
+            corr_mat[factor, metabolite] <- corr$estimate
+            corr_p_val_mat[factor, metabolite] <- corr$p.value
+        }
+    }
+
+    factor_metabolite_corr[[panel]] <- corr_mat
+    factor_metabolite_corr_p[[panel]] <- corr_p_val_mat
+
+    colnames(corr_mat) <- metabolite_name_mapper(curr_metabolites)
+    factor_metabolite_heatmap_matrices[[panel]] <- corr_mat
+}
+
+```
+
+## Panel 1
+
+```{r factor_metabolite_corr_panel_1, echo=FALSE, message = FALSE, fig.dim = c(8, 8)}
+
+corrplot(
+    factor_metabolite_heatmap_matrices$Panel_1,
+    col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+    tl.col = "black"
+)
+
+```
+
+## Panel 2
+
+```{r factor_metabolite_corr_panel_2, echo=FALSE, message = FALSE, fig.dim = c(12, 8)}
+
+corrplot(
+    factor_metabolite_heatmap_matrices$Panel_2,
+    col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+    tl.col = "black"
+)
+
+```
+
+# Feature-feature scatter plots
+
+```{r feature_feature_scatter, echo=FALSE, results="asis"}
+
+scatter_combinations <- list()
+
+# curr_combs <- list()
+
+# curr_combs[["Lachnospiraceae_vs_VC_85"]] <- c("otu54_16S", "VC_85_0")
+# curr_combs[["Lachnoclostridium_vs_VC_85"]] <-  c("otu26_16S", "VC_85_0")
+# curr_combs[["Blautia_vs_VC_85"]] <-  c("otu230", "VC_85_0")
+
+# scatter_combinations[["Factor1"]] <- curr_combs
+
+curr_combs <- list()
+curr_combs[["Lachnospiraceae_vs_BAC3_V__5269"]] <- c("otu54_16S", "BAC3_V__5269")
+curr_combs[["Lachnoclostridium_vs_BAC3_V__5269"]] <- c("otu26_16S", "BAC3_V__5269")
+curr_combs[["Flavonifractor_vs_VC_BAC3_V__5269"]] <- c("otu32", "BAC3_V__5269")
+curr_combs[["Blautia_vs_VC_BAC3_V__5269"]] <- c("otu230", "BAC3_V__5269")
+curr_combs[["Anaerostipes_vs_VC_BAC3_V__5269"]] <- c("otu75_16S", "BAC3_V__5269")
+curr_combs[["Agathobacter_vs_VC_BAC3_V__5269"]] <- c("otu135", "BAC3_V__5269")
+
+curr_combs[["Lachnospiraceae_vs_VC_27_1"]] <- c("otu54_16S", "VC_27_1")
+curr_combs[["Lachnoclostridium_vs_VC_27_1"]] <- c("otu26_16S", "VC_27_1")
+curr_combs[["Flavonifractor_vs_VC_27_1"]] <- c("otu32", "VC_27_1")
+curr_combs[["Blautia_vs_VC_27_1"]] <- c("otu230", "VC_27_1")
+curr_combs[["Anaerostipes_vs_VC_27_1"]] <- c("otu75_16S", "VC_27_1")
+curr_combs[["Agathobacter_vs_VC_27_1"]] <- c("otu135", "VC_27_1")
+
+curr_combs[["Lachnospiraceae_vs_VC_62_0"]] <- c("otu54_16S", "VC_62_0")
+curr_combs[["Lachnoclostridium_vs_VC_62_0"]] <- c("otu26_16S", "VC_62_0")
+curr_combs[["Flavonifractor_vs_VC_62_0"]] <- c("otu32", "VC_62_0")
+curr_combs[["Blautia_vs_VC_62_0"]] <- c("otu230", "VC_62_0")
+curr_combs[["Anaerostipes_vs_VC_62_0"]] <- c("otu75_16S", "VC_62_0")
+curr_combs[["Agathobacter_vs_VC_62_0"]] <- c("otu135", "VC_62_0")
+
+scatter_combinations[["Factor3"]] <- curr_combs
+
+curr_combs <- list()
+curr_combs[["Bacteroides_vs_VC_117_5"]] <- c("otu3", "VC_117_5")
+curr_combs[["Bacteroides_vs_VC_117_2"]] <- c("otu3", "VC_117_2")
+curr_combs[["Bacteroides_vs_VC_191_0"]] <- c("otu3", "VC_191_0")
+curr_combs[["Parabacteroides_vs_VC_612_0"]] <- c("otu12", "VC_612_0")
+curr_combs[["Parabacteroides_vs_VC_122_0"]] <- c("otu12", "VC_122_0")
+curr_combs[["Parabacteroides_vs_VC_241_3"]] <- c("otu12", "VC_241_3")
+curr_combs[["Lachnospiraceae_UCG-004_vs_VC_611_1"]] <- c("otu20_16S", "VC_611_1")
+curr_combs[["Lachnospiraceae_UCG-004_vs_VC_191_0"]] <- c("otu20_16S", "VC_191_0")
+
+scatter_combinations[["Factor4"]] <- curr_combs
+
+metabolites_scatter <- c(
+    "butyric_acid",
+    "2_methylbutyric_acid",
+    "valeric_acid",
+    "isovaleric_acid",
+    "propionic_acid",
+    "acetic_acid",
+    "dehydrolithocholic_acid",
+    "desaminotyrosine",
+    "indole_3_carboxyaldehyde"
+)
+
+metabolite_data_scatter <- t(model_input[["metabolites"]]$group1[metabolites_scatter, ])
+
+# Create plot data
+
+scatter_plot_data <- list()
+
+for (factor in names(scatter_combinations)) {
+    scatter_plot_data[[factor]] <- list()
+    for (comb in names(scatter_combinations[[factor]])) {
+        curr_comb <- scatter_combinations[[factor]][[comb]]
+        scatter_plot_data[[factor]][[comb]] <- data.frame(
+            "sample" = rownames(metabolite_data_scatter),
+            "bacterium" = model_input[["16S"]]$group1[curr_comb[1], ],
+            "virus" = model_input[["virome"]]$group1[curr_comb[2], ],
+            check.names = FALSE
+        )
+
+        scatter_plot_data[[factor]][[comb]] <- cbind(
+            scatter_plot_data[[factor]][[comb]], metabolite_data_scatter
+        )
+        scatter_plot_data[[factor]][[comb]] <- scatter_plot_data[[factor]][[comb]][
+            !is.na(scatter_plot_data[[factor]][[comb]][["bacterium"]]) &
+            !is.na(scatter_plot_data[[factor]][[comb]][["virus"]]),
+        ]
+    }
+}
+
+# ggplot plots
+
+# feature_feature_scatter <- list()
+
+# for (factor in names(scatter_plot_data)) {
+#     feature_feature_scatter[[factor]] <- list()
+#     for (comb in names(scatter_plot_data[[factor]])) {
+#         feature_feature_scatter[[factor]][[comb]] <- list()
+#         axis_labels <- strsplit(comb, "_vs_")[[1]]
+#         for (metabolite in metabolites_scatter) {
+#             color_label <- name_mapping[["metabolites"]][metabolite]
+
+#             plt <- ggplot(
+#                 scatter_plot_data[[factor]][[comb]],
+#                 aes_string(x = "bacterium", y = "virus", color = metabolite)
+#             ) + geom_point() +  scale_color_gradient(low="white", high="blue") +
+#             geom_smooth(method = "lm") +
+#             labs(x = axis_labels[1], y = axis_labels[2], color = color_label)
+
+#             feature_feature_scatter[[factor]][[comb]][[metabolite]] <- plt
+#         }
+#     }
+# }
+
+# ggpubr plots
+
+feature_feature_scatter_pubr <- list()
+
+for (factor in names(scatter_plot_data)) {
+    feature_feature_scatter_pubr[[factor]] <- list()
+    for (comb in names(scatter_plot_data[[factor]])) {
+        feature_feature_scatter_pubr[[factor]][[comb]] <- list()
+        axis_labels <- strsplit(comb, "_vs_")[[1]]
+        curr_comb <- scatter_combinations[[factor]][[comb]]
+        corr_coeff <- feature_feature_corr[[factor]][["16S_virome"]][
+            curr_comb[1], curr_comb[2]
+        ]
+        corr_p_adj <- feature_feature_corr_p_adj[[factor]][["16S_virome"]][
+            curr_comb[1], curr_comb[2]
+        ]
+
+        for (metabolite in metabolites_scatter) {
+            color_label <- name_mapping[["metabolites"]][metabolite]
+
+            plt <- ggscatter(
+                data = scatter_plot_data[[factor]][[comb]],
+                x = "bacterium",
+                y = "virus",
+                color = metabolite,
+                add = "reg.line",
+                add.params = list(color = "#666666"),
+                conf.int = TRUE,
+                cor.coef = FALSE,
+                size = 3
+            ) +
+            labs(x = axis_labels[1], y = axis_labels[2], color = color_label)
+
+            x_max <- max(plt$data$bacterium, na.rm = TRUE)
+            x_min <- min(plt$data$bacterium, na.rm = TRUE)
+            x_range <- x_max - x_min
+            y_max <- max(plt$data$virus, na.rm = TRUE)
+
+            plt <- plt + annotate(
+                "text",
+                x = x_min + 0.15*x_range,
+                y = y_max,
+                label = paste0(
+                    "R = ", format(corr_coeff, digits = 3),
+                    ", p = ", format(corr_p_adj, digits = 3, scientific = TRUE)
+                ),
+                size = 7,
+                color = "black"
+            )
+            feature_feature_scatter_pubr[[factor]][[comb]][[metabolite]] <- plt
+        }
+    }
+}
+
+# Print plots
+
+compute_scale <- function(x) {
+    scale <- list()
+    scale[["min"]] <- min(x, na.rm = TRUE)
+    scale[["max"]] <- max(x, na.rm = TRUE)
+    scale[["mid"]]  <- scale[["min"]] + (scale[["max"]] - scale[["min"]])/2
+
+    return(scale)
+}
+
+for (factor in names(scatter_plot_data)) {
+    cat(paste0("## ", factor))
+    cat("\n\n")
+    for (comb in names(scatter_plot_data[[factor]])) {
+        cat(paste0("### Scatter: ", comb))
+        cat("\n\n")
+        for (metabolite in metabolites_scatter) {
+            color_label <- name_mapping[["metabolites"]][metabolite]
+            cat(paste0("#### Metabolite: ", color_label))
+            cat("\n\n")
+
+            color_scale <- compute_scale(
+                scatter_plot_data[[factor]][[comb]][[metabolite]]
+            )
+
+            plt <- feature_feature_scatter_pubr[[factor]][[comb]][[metabolite]] +
+            scale_color_gradient2(
+                low = "blue",
+                high = "red",
+                mid = "white",
+                limits = c(color_scale[["min"]], color_scale[["max"]]),
+                midpoint = color_scale[["mid"]]
+            )
+            print(plt)
+            cat("\n\n")
+        }
+    }
+}
+
+```
+
+# Factor-factor scatter plots
+
+```{r factor_factor_scatter, echo=FALSE, results="asis"}
+
+timepoint_labels_pre_post <- c("d -7", "d \u22657")
+timepoint_colors_pre_post <- c("#3F7F02", "#FC8008")
+clinical_metadata_colors <- c("#0F7FFE", "#FB0106")
+
+factor_factor_scatter <- list()
+
+factor_combs <- list(
+    "Factor1_Factor3" = c("Factor1", "Factor3"),
+    "Factor4_Factor3" = c("Factor4", "Factor3"),
+    "Factor1_Factor4" = c("Factor1", "Factor4")
+)
+
+for (comb in names(factor_combs)) {
+    factor_factor_scatter[[comb]] <- list()
+
+    factor_factor_scatter[[comb]][["GvHD_pre_post"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_GvHD_binary",
+        shape = "pre_post_allo_SCT"
+    ) + scale_shape(
+        name = NULL,
+        breaks = c("pre", "post"),
+        labels = timepoint_labels_pre_post
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_GvHD_binary"]],
+        values = clinical_metadata_colors
+    )
+
+    factor_factor_scatter[[comb]][["TRM_pre_post"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_TRM_1yr",
+        shape = "pre_post_allo_SCT"
+    ) + scale_shape(
+        name = NULL,
+        breaks = c("pre", "post"),
+        labels = timepoint_labels_pre_post
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_TRM_1yr"]],
+        values = clinical_metadata_colors
+    )
+
+    factor_factor_scatter[[comb]][["OS_pre_post"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_survival_overall",
+        shape = "pre_post_allo_SCT"
+    ) + scale_shape(
+        name = NULL,
+        breaks = c("pre", "post"),
+        labels = timepoint_labels_pre_post
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_survival_overall"]],
+        values = clinical_metadata_colors
+    )
+
+    factor_factor_scatter[[comb]][["pre_post"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pre_post_allo_SCT"
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c("pre", "post"),
+        labels = timepoint_labels_pre_post,
+        values = timepoint_colors_pre_post
+    )
+
+    factor_factor_scatter[[comb]][["GvHD"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_GvHD_binary"
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_GvHD_binary"]],
+        values = clinical_metadata_colors
+    )
+
+    factor_factor_scatter[[comb]][["TRM"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_TRM_1yr"
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_TRM_1yr"]],
+        values = clinical_metadata_colors
+    )
+
+    factor_factor_scatter[[comb]][["OS"]] <- ggscatter(
+        metadata_factors_subset,
+        x = factor_combs[[comb]][1],
+        y = factor_combs[[comb]][2],
+        color = "pat_survival_overall"
+    ) + scale_color_manual(
+        name = NULL,
+        breaks = c(0, 1),
+        labels = clinical_factors_labels[["pat_survival_overall"]],
+        values = clinical_metadata_colors
+    )
+}
+
+# Print plots
+
+for (comb in names(factor_factor_scatter)) {
+    cat(paste0("## ", comb))
+    cat("\n\n")
+    for (plt_id in names(factor_factor_scatter[[comb]])) {
+        cat(paste0("### ", plt_id))
+        cat("\n\n")
+        print(factor_factor_scatter[[comb]][[plt_id]])
+        cat("\n\n")
+    }
+}
+
+```
+
+# Factor boxplots by timepoint
+
+```{r factor_boxplots_timepoint, echo=FALSE, message = FALSE, results="asis"}
+
+timepoints_selected <- c("COND", "0", "7", "14", "21", "28")
+timepoint_labels <- c("d -7", "d +0", "d +7", "d +14", "d +21", "d +28")
+timepoint_colors <- c("#3F7F02", "#FDCC65", "#FC8008", "#FC6665", "#FB0106", "#FB027F")
+
+metadata_factors_no_idx <- metadata_factors[
+    metadata_factors[["amp_Timepoint"]] %in% timepoints_selected,
+]
+
+metadata_factors_no_idx[["amp_Timepoint"]] <- factor(
+    metadata_factors_no_idx[["amp_Timepoint"]],
+    levels = timepoints_selected
+)
+
+factor_timepoint_stats <- list()
+factor_timepoint_p_vals <- c()
+
+for (factor in names(relevantFactors)) {
+    stats_timepoint <- rstatix::wilcox_test(
+        formula(paste(factor, " ~ amp_Timepoint")),
+        data = metadata_factors_no_idx,
+        ref.group = "COND"
+    ) %>% add_xy_position(x = "amp_Timepoint")
+
+    stats_timepoint$y.position <- rev(stats_timepoint$y.position)
+
+    curr_p_vals <- stats_timepoint$p
+    names(curr_p_vals) <- paste0(factor, "_", stats_timepoint$group2)
+    factor_timepoint_p_vals <- c(factor_timepoint_p_vals, curr_p_vals)
+
+    factor_timepoint_stats[[factor]] <- stats_timepoint
+}
+
+factor_timepoint_p_vals_adj <- p.adjust(factor_timepoint_p_vals, method = "BH")
+
+for (factor in names(relevantFactors)) {
+    curr_names <- paste0(factor, "_", factor_timepoint_stats[[factor]]$group2)
+    factor_timepoint_stats[[factor]]$p.adj <- factor_timepoint_p_vals_adj[curr_names]
+    factor_timepoint_stats[[factor]] <- factor_timepoint_stats[[factor]] %>% add_significance("p.adj")
+}
+
+factor_timepoint_plots <- list()
+
+for (factor in names(relevantFactors)) {
+    cat(paste0("### ", factor))
+    cat("\n\n")
+    plt <- ggboxplot(
+        data = metadata_factors_no_idx,
+        x = "amp_Timepoint",
+        y = factor,
+        color = "amp_Timepoint",
+        add = "jitter"
+    ) + labs(
+        x = "timepoint",
+        color = "timepoint"
+    ) + scale_x_discrete(
+        breaks = timepoints_selected,
+        labels = timepoint_labels
+    ) + scale_color_manual(
+        breaks = timepoints_selected,
+        labels = timepoint_labels,
+        values = timepoint_colors
+    ) + stat_pvalue_manual(
+        factor_timepoint_stats[[factor]],
+        label = "p.adj.signif",
+        tip.length = 0
+    )
+    factor_timepoint_plots[[factor]] <- plt
+    print(plt)
+    cat("\n\n")
+}
+
+metadata_factors_no_idx_avg <- metadata_factors_no_idx %>%
+    group_by(amp_Timepoint) %>%
+    summarise(
+        across(starts_with("Factor"),
+        list(
+            "median" = median,
+            "q25" = function(x) quantile(x, 0.25),
+            "q75" = function(x) quantile(x, 0.75),
+            "mean" = mean,
+            "sd" = sd)
+        )
+    )
+
+```
+
+```{r save_data, echo=FALSE, eval=save_data}
+
+# Variance explained plots
+
+ggsave(
+    filename = file.path(
+        plot_path,
+        "manuscript",
+        "variance_explained",
+        "variance_explained_by_factor.png"
+    ),
+    plot = plt_var_expl,
+    width = 7,
+    height = 7,
+    dpi = 300
+)
+
+ggsave(
+    filename = file.path(
+        plot_path,
+        "manuscript",
+        "variance_explained",
+        "variance_explained_total.png"
+    ),
+    plot = plt_var_expl_abs,
+    width = 8,
+    height = 6,
+    dpi = 300
+)
+
+# Factor weigth plots
+
+for (factor in names(relevantFactors)) {
+    for (view in views) {
+        plot_name <- paste0(factor, "_weights_", view, ".png")
+        plt <- plot(factor_weight_plots[[factor]][[view]])
+
+        ggsave(
+                filename = file.path(
+                    plot_path,
+                    "manuscript",
+                    "factor_weights",
+                    plot_name
+                ),
+                plot = plt,
+                width = 8,
+                height = 8,
+                dpi = 300
+        )
+    }
+}
+
+# Factor weight plot data (for Andreas to find family names associated with "unclassified")
+
+for (factor in names(relevantFactors)) {
+    for (view in views) {
+        file_name <- paste0(factor, "_weights_", view, ".csv")
+        factor_weight_data <- factor_weight_plots[[factor]][[view]]$data
+
+        write.csv(
+            factor_weight_data,
+            file = file.path(table_path, "manuscript", "factor_weights", file_name),
+            quote = FALSE,
+            row.names = FALSE
+        )
+    }
+}
+
+# Feature-Feature scatter
+
+for (factor in names(scatter_plot_data)) {
+    for (comb in names(scatter_plot_data[[factor]])) {
+        for (metabolite in metabolites_scatter) {
+            plot_name <- paste0(factor, "_", comb, "_", metabolite, ".png")
+            color_label <- name_mapping[["metabolites"]][metabolite]
+
+            color_scale <- compute_scale(
+                scatter_plot_data[[factor]][[comb]][[metabolite]]
+            )
+
+            # It is required to create a new scale_color_gradient2, because it does not
+            # keep the correct midpoint
+
+            plt <- feature_feature_scatter_pubr[[factor]][[comb]][[metabolite]] +
+            scale_color_gradient2(
+                low = "blue",
+                high = "red",
+                mid = "white",
+                limits = c(color_scale[["min"]], color_scale[["max"]]),
+                midpoint = color_scale[["mid"]]
+            ) + labs(x = NULL, y = NULL, color = color_label)
+
+            ggsave(
+                filename = file.path(
+                    plot_path,
+                    "manuscript",
+                    "feature_feature_scatter",
+                    plot_name
+                ),
+                plot = plt,
+                width = 10,
+                height = 8,
+                dpi = 300
+            )
+        }
+    }
+}
+
+# Factor-factor scatter
+
+for (comb in names(factor_factor_scatter)) {
+    for (plt_id in names(factor_factor_scatter[[comb]])) {
+        plot_name <- paste0(comb, "_", plt_id, ".png")
+        plt <- factor_factor_scatter[[comb]][[plt_id]]
+
+        ggsave(
+            filename = file.path(
+                plot_path,
+                "manuscript",
+                "factor_factor_scatter",
+                plot_name
+            ),
+            plot = plt,
+            width = 8,
+            height = 8,
+            dpi = 300
+        )
+    }
+}
+
+# Factor timepoint boxplots
+
+for (factor in names(factor_timepoint_plots)) {
+    plot_name <- paste0(factor, "_timepoints.png")
+    plt <- factor_timepoint_plots[[factor]] + labs(x = NULL, color = NULL)
+
+    ggsave(
+        filename = file.path(
+            plot_path,
+            "manuscript",
+            "factor_timepoint_boxplots",
+            plot_name
+        ),
+        plot = plt,
+        width = 8,
+        height = 10,
+        dpi = 300
+    )
+}
+
+# Summary values for Factor timepoint boxplots
+
+write.csv(
+    metadata_factors_no_idx_avg,
+    file = file.path(table_path, "manuscript", "factor_timepoint_analysis", "factor_summary_timepoints.csv"),
+    quote = FALSE,
+    row.names = FALSE
+)
+
+# Feature-feature correlation heatmaps
+
+for (factor in names(feature_feature_corr)) {
+    for (comb in colnames(viewCombs)) {
+        plot_name <- paste0(factor, "_feature_feature_corr_", comb, ".png")
+
+        png(filename = file.path(
+                plot_path,
+                "manuscript",
+                "feature_feature_corr",
+                plot_name
+            ), width = 10, height = 10, unit = "in", res = 100
+        )
+        corrplot(
+            feature_feature_heatmap_matrices[[factor]][[comb]],
+            col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+            tl.col = "black"
+        )
+        dev.off()
+    }
+}
+
+# Feature-feature correlation p-value (adjusted) tables
+
+for (factor in names(feature_feature_corr_p_adj)) {
+    for (comb in colnames(viewCombs)) {
+        file_name <- paste0(factor, "_feature_feature_corr_p_adj_", comb, ".csv")
+
+        feature_ids <- list()
+        feature_names <- list()
+        for (view in viewCombs[, comb]) {
+            feature_ids[[view]] <- as.character(
+                names(top_weights[[factor]][[view]])
+            )
+            feature_ids[[view]] <- str_remove(
+                feature_ids[[view]], paste0("_", view, "$")
+            )
+
+            if(view %in% names(name_mapping)) {
+                feature_names[[view]] <- name_mapping[[view]][feature_ids[[view]]]
+            } else {
+                feature_names[[view]] <- feature_ids[[view]]
+            }
+        }
+
+        mat <- feature_feature_corr_p_adj[[factor]][[comb]]
+        rownames(mat) <- feature_names[[1]]
+        colnames(mat) <- feature_names[[2]]
+
+        write.csv(
+            mat,
+            file = file.path(table_path, "manuscript", "feature_feature_corr", file_name),
+            quote = FALSE,
+            row.names = TRUE
+        )
+    }
+}
+
+# Feature-metabolite correlation heatmaps
+
+plot_name <- "Factor_metabolite_corr_panel_1.png"
+png(filename = file.path(
+        plot_path,
+        "manuscript",
+        "factor_metabolite_corr",
+        plot_name
+    ), width = 8, height = 8, unit = "in", res = 100
+)
+corrplot(
+    factor_metabolite_heatmap_matrices$Panel_1,
+    col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+    tl.col = "black"
+)
+dev.off()
+
+plot_name <- "Factor_metabolite_corr_panel_2.png"
+png(filename = file.path(
+        plot_path,
+        "manuscript",
+        "factor_metabolite_corr",
+        plot_name
+    ), width = 12, height = 8, unit = "in", res = 100
+)
+corrplot(
+    factor_metabolite_heatmap_matrices$Panel_2,
+    col = colorRampPalette(rev(brewer.pal(n = 11, name = "RdBu")))(200),
+    tl.col = "black"
+)
+dev.off()
+
+# Save covariate scale parameter table
+
+write.csv(
+    covariate_scales_table,
+    file = file.path(table_path, "manuscript", "covariate_analysis", "covariate_scale_parameters.csv"),
+    quote = FALSE,
+    row.names = FALSE
+)
+
+```
+
+```{r,eval=TRUE}
+sessionInfo()
+```

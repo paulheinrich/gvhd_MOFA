@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu26_16S,Factor3,1.20755842944524,16S,+,otu26_16S,Lachnoclostridium
+otu54_16S,Factor3,1.16233015469696,16S,+,otu54_16S,unclassified_Lachnospiraceae
+otu32,Factor3,1.02846909354192,16S,+,otu32,Flavonifractor
+otu91,Factor3,0.9315308381661,16S,+,otu91,[Ruminococcus] gnavus group
+otu21,Factor3,0.915640453571957,16S,+,otu21,Erysipelatoclostridium
+otu52,Factor3,0.867280018839001,16S,+,otu52,Veillonella
+otu45,Factor3,0.86560585961605,16S,+,otu45,[Clostridium] innocuum group
+otu863,Factor3,0.764297203103635,16S,-,otu863,NK4A214 group
+otu75_16S,Factor3,0.746015448654748,16S,+,otu75_16S,Anaerostipes
+otu489,Factor3,0.745575101999278,16S,-,otu489,unidentified
+otu230,Factor3,0.698589216728688,16S,+,otu230,Blautia
+otu20_16S,Factor3,0.629771246067121,16S,+,otu20_16S,Lachnospiraceae UCG-004
+otu1478,Factor3,0.609383828542464,16S,-,otu1478,Family XIII AD3011 group
+otu135,Factor3,0.589729450662084,16S,+,otu135,Agathobacter
+otu599,Factor3,0.568775736013042,16S,-,otu599,UCG-002

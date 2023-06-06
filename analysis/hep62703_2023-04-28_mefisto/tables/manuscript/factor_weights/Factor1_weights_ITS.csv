@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu610,Factor1,0.036591847388523,ITS,+,otu610,Mrakia
+otu1194,Factor1,0.0238876999623972,ITS,-,otu1194,Physisporinus
+otu835,Factor1,0.0200293118751958,ITS,+,otu835,Alnecium
+otu890,Factor1,0.0186526214768228,ITS,+,otu890,Scleroconidioma
+otu509,Factor1,0.0186104180050285,ITS,-,otu509,Rhodosporidiobolus
+otu166,Factor1,0.0180023564660353,ITS,+,otu166,unidentified_1635
+otu643,Factor1,0.0156427206141894,ITS,+,otu643,Ramularia
+otu961,Factor1,0.0155803968028,ITS,-,otu961,unidentified
+otu1068,Factor1,0.0153784552643729,ITS,-,otu1068,unidentified
+otu1020,Factor1,0.0146797513689085,ITS,+,otu1020,unidentified_3498
+otu682,Factor1,0.0146488703745642,ITS,-,otu682,unidentified_910
+otu411,Factor1,0.0141118799563385,ITS,-,otu411,Pseudallescheria
+otu419_ITS,Factor1,0.0140930234293975,ITS,-,otu419_ITS,unclassified_Teratosphaeriaceae
+otu41,Factor1,0.0140281999537824,ITS,+,otu41,Talaromyces
+otu874,Factor1,0.0139479833716547,ITS,+,otu874,unidentified_23

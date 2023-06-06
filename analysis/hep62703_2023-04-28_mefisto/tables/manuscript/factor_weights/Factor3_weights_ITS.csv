@@ -1,0 +1,16 @@
+feature,factor,value,view,sign,feature_id,feature_name
+otu307,Factor3,0.113693285256556,ITS,+,otu307,Kondoa
+otu1181_ITS,Factor3,0.0518039175260678,ITS,+,otu1181_ITS,Leucosporidium
+otu891,Factor3,0.0431270239244345,ITS,+,otu891,unidentified
+otu379,Factor3,0.0379737522369017,ITS,+,otu379,Trichosporon
+otu177,Factor3,0.0261781180830328,ITS,-,otu177,unclassified_Didymellaceae
+otu585,Factor3,0.0225927492745333,ITS,+,otu585,Pichia
+otu970,Factor3,0.0215394545995008,ITS,+,otu970,Strobilurus
+otu529,Factor3,0.0214596611190796,ITS,-,otu529,unidentified_12
+otu31_ITS,Factor3,0.0207844354519668,ITS,+,otu31_ITS,unidentified_51
+otu76,Factor3,0.0206317874235712,ITS,-,otu76,Clavispora
+otu187,Factor3,0.0175611287334747,ITS,-,otu187,Filobasidium
+otu511,Factor3,0.0167473516260337,ITS,+,otu511,Starmerella
+otu583,Factor3,0.0113292047329804,ITS,+,otu583,Itersonilia
+otu11,Factor3,0.01096955849392,ITS,+,otu11,Nakaseomyces
+otu20_ITS,Factor3,0.0107969415638186,ITS,-,otu20_ITS,Cladosporium
